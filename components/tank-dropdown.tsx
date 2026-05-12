@@ -48,14 +48,27 @@ export function TankDropdown({
             <Text style={styles.sheetTitle}>{label}</Text>
             <ScrollView style={styles.optionList}>
               {includeAllOption ? (
-                <Pressable style={styles.option} onPress={() => chooseTank(null)}>
-                  <Text style={styles.optionText}>{allOptionLabel}</Text>
+                <Pressable
+                  style={[styles.option, selectedTankId === null ? styles.selectedOption : null]}
+                  onPress={() => chooseTank(null)}>
+                  <Text
+                    style={[styles.optionText, selectedTankId === null ? styles.selectedOptionText : null]}>
+                    {allOptionLabel}
+                  </Text>
+                  {selectedTankId === null ? <Text style={styles.selectedText}>Selected</Text> : null}
                 </Pressable>
               ) : null}
 
               {tanks.map((tank) => (
-                <Pressable key={tank.id} style={styles.option} onPress={() => chooseTank(tank.id)}>
-                  <Text style={styles.optionText}>{tank.name}</Text>
+                <Pressable
+                  key={tank.id}
+                  style={[styles.option, selectedTankId === tank.id ? styles.selectedOption : null]}
+                  onPress={() => chooseTank(tank.id)}>
+                  <Text
+                    style={[styles.optionText, selectedTankId === tank.id ? styles.selectedOptionText : null]}>
+                    {tank.name}
+                  </Text>
+                  {selectedTankId === tank.id ? <Text style={styles.selectedText}>Selected</Text> : null}
                 </Pressable>
               ))}
             </ScrollView>
@@ -124,13 +137,32 @@ const styles = StyleSheet.create({
     maxHeight: 420,
   },
   option: {
+    alignItems: 'center',
     borderBottomColor: AquariumTheme.borderSoft,
     borderBottomWidth: 1,
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
     paddingVertical: 14,
+  },
+  selectedOption: {
+    backgroundColor: AquariumTheme.surfaceMint,
+    marginHorizontal: -8,
+    paddingHorizontal: 8,
   },
   optionText: {
     color: AquariumTheme.text,
+    flex: 1,
     fontSize: 16,
     fontWeight: '600',
+  },
+  selectedOptionText: {
+    color: AquariumTheme.teal,
+    fontWeight: '800',
+  },
+  selectedText: {
+    color: AquariumTheme.teal,
+    fontSize: 12,
+    fontWeight: '800',
   },
 });

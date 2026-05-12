@@ -13,77 +13,53 @@ import {
   View,
 } from 'react-native';
 
+import { NativeDateTimeField } from '@/components/native-date-time-field';
+import { QuickValueRow } from '@/components/quick-value-row';
 import { TankDropdown } from '@/components/tank-dropdown';
 import { AquariumTheme } from '@/constants/aquarium-theme';
 import {
   getDefaultTankId,
   getTanks,
   insertWaterTest,
+  setDefaultTankId,
   type NewWaterTest,
   type Tank,
 } from '@/lib/database';
-
-type NumberField = 'nitrate_no3' | 'nitrite_no2' | 'ph' | 'kh' | 'gh';
-
-const numberFields: { key: NumberField; label: string; placeholder: string }[] = [
-  { key: 'nitrate_no3', label: 'NO3 nitrate', placeholder: 'Example: 20' },
-  { key: 'nitrite_no2', label: 'NO2 nitrite', placeholder: 'Example: 0' },
-  { key: 'ph', label: 'pH', placeholder: 'Example: 7.2' },
-  { key: 'kh', label: 'KH', placeholder: 'Example: 4' },
-  { key: 'gh', label: 'GH', placeholder: 'Example: 8' },
-];
-
-function blankNumbers() {
-  return {
-    nitrate_no3: '',
-    nitrite_no2: '',
-    ph: '',
-    kh: '',
-    gh: '',
-  };
-}
-
-function parseOptionalNumber(value: string) {
-  const trimmed = value.trim();
-
-  if (!trimmed) {
-    return null;
-  }
-
-  const numberValue = Number(trimmed);
-
-  return Number.isFinite(numberValue) ? numberValue : Number.NaN;
-}
+import {
+  blankNumbers,
+  numberFields,
+  parseWaterTestNumbers,
+  type NumberField,
+} from '@/lib/water-test-form';
 
 export default function AddTestScreen() {
   const router = useRouter();
   const [tanks, setTanks] = useState<Tank[]>([]);
   const [selectedTankId, setSelectedTankId] = useState<number | null>(null);
-  const [testedAt, setTestedAt] = useState(new Date().toISOString());
+  const [testedAt, setTestedAt] = useState(new Date());
   const [numbers, setNumbers] = useState(blankNumbers);
   const [notes, setNotes] = useState('');
   const [didWaterChange, setDidWaterChange] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [shouldAutoSelectTank, setShouldAutoSelectTank] = useState(true);
 
   const loadTanks = useCallback(async () => {
     const [savedTanks, defaultTankId] = await Promise.all([getTanks(), getDefaultTankId()]);
 
     setTanks(savedTanks);
     setSelectedTankId((current) =>
-      current ?? (shouldAutoSelectTank ? defaultTankId ?? savedTanks[0]?.id ?? null : null),
+      current ?? defaultTankId ?? savedTanks[0]?.id ?? null,
     );
-  }, [shouldAutoSelectTank]);
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
-      setTestedAt(new Date().toISOString());
+      setTestedAt(new Date());
       loadTanks();
     }, [loadTanks]),
   );
 
   function resetForm() {
-    setTestedAt(new Date().toISOString());
+    setTestedAt(new Date());
     setNumbers(blankNumbers());
     setNotes('');
     setDidWaterChange(false);
@@ -99,13 +75,7 @@ export default function AddTestScreen() {
       return;
     }
 
-    const parsedNumbers = {
-      nitrate_no3: parseOptionalNumber(numbers.nitrate_no3),
-      nitrite_no2: parseOptionalNumber(numbers.nitrite_no2),
-      ph: parseOptionalNumber(numbers.ph),
-      kh: parseOptionalNumber(numbers.kh),
-      gh: parseOptionalNumber(numbers.gh),
-    };
+    const parsedNumbers = parseWaterTestNumbers(numbers);
 
     const invalidField = numberFields.find((field) => Number.isNaN(parsedNumbers[field.key]));
 
@@ -116,7 +86,7 @@ export default function AddTestScreen() {
 
     const test: NewWaterTest = {
       tank_id: selectedTankId,
-      tested_at: testedAt,
+      tested_at: testedAt.toISOString(),
       nitrate_no3: parsedNumbers.nitrate_no3,
       nitrite_no2: parsedNumbers.nitrite_no2,
       ph: parsedNumbers.ph,
@@ -128,10 +98,9 @@ export default function AddTestScreen() {
 
     try {
       setIsSaving(true);
+      await setDefaultTankId(selectedTankId);
       await insertWaterTest(test);
       resetForm();
-      setShouldAutoSelectTank(false);
-      setSelectedTankId(null);
       router.push('/history' as never);
     } catch (error) {
       console.error(error);
@@ -167,16 +136,11 @@ export default function AddTestScreen() {
           onSelect={setSelectedTankId}
         />
 
-        <View style={styles.field}>
-          <Text style={styles.label}>Test date/time</Text>
-          <TextInput
-            autoCapitalize="none"
-            style={styles.input}
-            value={testedAt}
-            onChangeText={setTestedAt}
-            placeholder="2026-05-10T12:00:00.000Z"
-          />
-        </View>
+        <NativeDateTimeField
+          value={testedAt}
+          onChange={setTestedAt}
+          onSetNow={() => setTestedAt(new Date())}
+        />
 
         {numberFields.map((field) => (
           <View key={field.key} style={styles.field}>
@@ -188,6 +152,10 @@ export default function AddTestScreen() {
               value={numbers[field.key]}
               onChangeText={(value) => updateNumberField(field.key, value)}
               placeholder={field.placeholder}
+            />
+            <QuickValueRow
+              values={field.quickValues}
+              onSelect={(value) => updateNumberField(field.key, value)}
             />
           </View>
         ))}

@@ -22,6 +22,14 @@ const MAPPING = {
   'paperplane.fill': 'send',
   'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.right': 'chevron-right',
+  'bell.fill': 'notifications',
+  'bell.badge.fill': 'add-alert',
+  'target': 'track-changes',
+  'externaldrive.fill': 'storage',
+  'arrow.left': 'arrow-back',
+  'info.circle.fill': 'info',
+  'square.and.arrow.down.fill': 'file-download',
+  'square.and.arrow.up.fill': 'file-upload',
 } as IconMapping;
 
 /**

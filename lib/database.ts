@@ -73,6 +73,10 @@ export type NewWaterTest = {
   notes: string | null;
 };
 
+export type ImportedWaterTest = Omit<NewWaterTest, 'tank_id'> & {
+  tank_name: string;
+};
+
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let initializedPromise: Promise<void> | null = null;
 
@@ -492,6 +496,91 @@ export async function insertWaterTest(test: NewWaterTest) {
     test.notes,
     new Date().toISOString(),
   );
+}
+
+function normalizeFingerprintValue(value: string | number | null) {
+  if (value === null) {
+    return '';
+  }
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? String(value) : '';
+  }
+
+  return value.trim();
+}
+
+function waterTestFingerprint(test: {
+  tank_name: string;
+  tested_at: string;
+  nitrate_no3: number | null;
+  nitrite_no2: number | null;
+  ph: number | null;
+  kh: number | null;
+  gh: number | null;
+  did_water_change: number;
+  notes: string | null;
+}) {
+  return [
+    normalizeFingerprintValue(test.tank_name).toLocaleLowerCase(),
+    normalizeFingerprintValue(test.tested_at),
+    normalizeFingerprintValue(test.nitrate_no3),
+    normalizeFingerprintValue(test.nitrite_no2),
+    normalizeFingerprintValue(test.ph),
+    normalizeFingerprintValue(test.kh),
+    normalizeFingerprintValue(test.gh),
+    normalizeFingerprintValue(test.did_water_change),
+    normalizeFingerprintValue(test.notes),
+  ].join('|');
+}
+
+export async function importWaterTests(rows: ImportedWaterTest[]) {
+  await initDatabase();
+
+  const existingTests = await getAllWaterTests();
+  const fingerprints = new Set(existingTests.map(waterTestFingerprint));
+  const tanks = await getTanks();
+  const tankIdsByName = new Map(tanks.map((tank) => [tank.name.toLocaleLowerCase(), tank.id]));
+  let imported = 0;
+  let skipped = 0;
+  let tanksCreated = 0;
+
+  for (const row of rows) {
+    const tankName = row.tank_name.trim() || 'Imported Tank';
+    const fingerprint = waterTestFingerprint({
+      ...row,
+      tank_name: tankName,
+    });
+
+    if (fingerprints.has(fingerprint)) {
+      skipped += 1;
+      continue;
+    }
+
+    let tankId = tankIdsByName.get(tankName.toLocaleLowerCase());
+
+    if (!tankId) {
+      tankId = await createTank(tankName, null);
+      tankIdsByName.set(tankName.toLocaleLowerCase(), tankId);
+      tanksCreated += 1;
+    }
+
+    await insertWaterTest({
+      tank_id: tankId,
+      tested_at: row.tested_at,
+      nitrate_no3: row.nitrate_no3,
+      nitrite_no2: row.nitrite_no2,
+      ph: row.ph,
+      kh: row.kh,
+      gh: row.gh,
+      did_water_change: row.did_water_change,
+      notes: row.notes,
+    });
+    fingerprints.add(fingerprint);
+    imported += 1;
+  }
+
+  return { imported, skipped, tanksCreated };
 }
 
 export async function getWaterTest(id: number) {

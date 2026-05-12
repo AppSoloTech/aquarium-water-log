@@ -1,7 +1,8 @@
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { ReadingValueGrid, StatusInsight } from '@/components/reading-summary';
 import { StatusBadge } from '@/components/status-badge';
 import { AquariumTheme } from '@/constants/aquarium-theme';
 import {
@@ -9,6 +10,7 @@ import {
   getLatestWaterTestsByTank,
   getTankSummaries,
   initDatabase,
+  setDefaultTankId,
   type AnalyteRange,
   type TankSummary,
   type WaterTest,
@@ -19,11 +21,22 @@ function formatDate(value: string) {
   return new Date(value).toLocaleString();
 }
 
-function formatValue(label: string, value: number | null) {
-  return `${label}: ${value === null ? '-' : value}`;
+function daysSince(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const testedAt = new Date(value).getTime();
+
+  if (Number.isNaN(testedAt)) {
+    return null;
+  }
+
+  return Math.max(0, Math.floor((Date.now() - testedAt) / (1000 * 60 * 60 * 24)));
 }
 
 export default function HomeScreen() {
+  const router = useRouter();
   const [latestTests, setLatestTests] = useState<WaterTest[]>([]);
   const [rangesByTank, setRangesByTank] = useState<Record<number, AnalyteRange[]>>({});
   const [tanks, setTanks] = useState<TankSummary[]>([]);
@@ -69,6 +82,12 @@ export default function HomeScreen() {
 
     return result;
   }, {});
+  const totalTests = tanks.reduce((sum, tank) => sum + tank.test_count, 0);
+
+  async function logTankTest(tankId: number) {
+    await setDefaultTankId(tankId);
+    router.push('/add-test' as never);
+  }
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -100,6 +119,20 @@ export default function HomeScreen() {
         ))}
       </View>
 
+      {tanks.length > 0 && totalTests < 1 ? (
+        <View style={styles.checklistPanel}>
+          <Text style={styles.panelTitle}>Quick Start</Text>
+          <Text style={styles.checkItem}>Done: Create a tank</Text>
+          <Text style={styles.checkItem}>Next: Log your first water test</Text>
+          <Text style={styles.checkItem}>Later: Set target ranges and reminders</Text>
+          <Pressable
+            style={styles.primaryButton}
+            onPress={() => logTankTest(tanks[0].id)}>
+            <Text style={styles.primaryButtonText}>Log First Test</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
       <Text style={styles.sectionTitle}>Latest Reading</Text>
 
       {isLoading ? <Text style={styles.mutedText}>Loading latest readings...</Text> : null}
@@ -120,18 +153,24 @@ export default function HomeScreen() {
             return (
               <View key={tank.id} style={styles.readingCard}>
                 <View style={styles.panelHeader}>
-                  <Text style={styles.tankName}>{tank.name}</Text>
+                  <View style={styles.tankRowText}>
+                    <Text style={styles.tankName}>{tank.name}</Text>
+                    <Text style={styles.mutedText}>
+                      {daysSince(tank.latest_tested_at) === null
+                        ? 'No test date yet'
+                        : daysSince(tank.latest_tested_at) === 0
+                          ? 'Tested today'
+                          : `${daysSince(tank.latest_tested_at)} days since last test`}
+                    </Text>
+                  </View>
                   {latestTest ? <StatusBadge status={status} /> : null}
                 </View>
 
                 {latestTest ? (
                   <View style={styles.summaryGrid}>
                     <Text style={styles.mutedText}>Last tested {formatDate(latestTest.tested_at)}</Text>
-                    <Text style={styles.valueText}>{formatValue('NO3', latestTest.nitrate_no3)}</Text>
-                    <Text style={styles.valueText}>{formatValue('NO2', latestTest.nitrite_no2)}</Text>
-                    <Text style={styles.valueText}>{formatValue('pH', latestTest.ph)}</Text>
-                    <Text style={styles.valueText}>{formatValue('KH', latestTest.kh)}</Text>
-                    <Text style={styles.valueText}>{formatValue('GH', latestTest.gh)}</Text>
+                    <ReadingValueGrid test={latestTest} ranges={rangesByTank[tank.id] ?? []} />
+                    <StatusInsight test={latestTest} ranges={rangesByTank[tank.id] ?? []} />
                     <Text style={styles.valueText}>
                       Water change: {latestTest.did_water_change ? 'Yes' : 'No'}
                     </Text>
@@ -139,6 +178,19 @@ export default function HomeScreen() {
                 ) : (
                   <Text style={styles.mutedText}>No readings logged for this tank yet.</Text>
                 )}
+
+                <View style={styles.cardActions}>
+                  <Pressable style={styles.primaryAction} onPress={() => logTankTest(tank.id)}>
+                    <Text style={styles.primaryActionText}>Log Test</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.secondaryAction}
+                    onPress={() =>
+                      router.push({ pathname: '/history', params: { tankId: String(tank.id) } } as never)
+                    }>
+                    <Text style={styles.secondaryActionText}>View History</Text>
+                  </Pressable>
+                </View>
               </View>
             );
           })
@@ -186,6 +238,20 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 8,
   },
+  checklistPanel: {
+    backgroundColor: AquariumTheme.surfaceWarm,
+    borderColor: '#fed7aa',
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 10,
+    padding: 16,
+  },
+  checkItem: {
+    color: AquariumTheme.text,
+    fontSize: 15,
+    fontWeight: '700',
+    lineHeight: 22,
+  },
   panelHeader: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -227,6 +293,47 @@ const styles = StyleSheet.create({
   valueText: {
     color: AquariumTheme.text,
     fontSize: 16,
+  },
+  cardActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  primaryButton: {
+    alignItems: 'center',
+    backgroundColor: AquariumTheme.primary,
+    borderRadius: 8,
+    padding: 14,
+  },
+  primaryButtonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  primaryAction: {
+    alignItems: 'center',
+    backgroundColor: AquariumTheme.primary,
+    borderRadius: 8,
+    flex: 1,
+    padding: 12,
+  },
+  primaryActionText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  secondaryAction: {
+    alignItems: 'center',
+    backgroundColor: AquariumTheme.surface,
+    borderColor: AquariumTheme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    flex: 1,
+    padding: 12,
+  },
+  secondaryActionText: {
+    color: AquariumTheme.primary,
+    fontSize: 15,
+    fontWeight: '800',
   },
   mutedText: {
     color: AquariumTheme.muted,

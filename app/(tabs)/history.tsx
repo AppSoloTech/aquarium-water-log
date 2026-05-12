@@ -1,39 +1,46 @@
-import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { ReadingValueGrid, StatusInsight, TrendStrip } from '@/components/reading-summary';
 import { StatusBadge } from '@/components/status-badge';
 import { TankDropdown } from '@/components/tank-dropdown';
+import { WaterTrendChart, type TrendPoint } from '@/components/water-trend-chart';
 import { AquariumTheme } from '@/constants/aquarium-theme';
 import {
   deleteWaterTest,
   getAllWaterTests,
   getAnalyteRanges,
   getTanks,
+  setDefaultTankId,
+  type AnalyteKey,
   type AnalyteRange,
   type Tank,
   type WaterTest,
 } from '@/lib/database';
 import { shareWaterTestsCsv } from '@/lib/export-csv';
-import { getOverallStatus } from '@/lib/water-status';
+import { ANALYTE_LABELS, getOverallStatus } from '@/lib/water-status';
 
 function formatDate(value: string) {
   return new Date(value).toLocaleString();
 }
 
-function valueText(label: string, value: number | null) {
-  return `${label} ${value === null ? '-' : value}`;
-}
+const chartAnalytes: AnalyteKey[] = ['nitrate_no3', 'nitrite_no2', 'ph', 'kh', 'gh'];
 
 export default function HistoryScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ tankId?: string }>();
+  const routeTankId = Number(params.tankId);
   const [tanks, setTanks] = useState<Tank[]>([]);
-  const [selectedTankId, setSelectedTankId] = useState<number | null>(null);
+  const [selectedTankId, setSelectedTankId] = useState<number | null>(
+    Number.isFinite(routeTankId) && routeTankId > 0 ? routeTankId : null,
+  );
   const [tests, setTests] = useState<WaterTest[]>([]);
   const [rangesByTank, setRangesByTank] = useState<Record<number, AnalyteRange[]>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [selectedAnalyte, setSelectedAnalyte] = useState<AnalyteKey>('nitrate_no3');
 
   const loadTests = useCallback(async () => {
     try {
@@ -67,6 +74,12 @@ export default function HistoryScreen() {
     }, [loadTests]),
   );
 
+  useEffect(() => {
+    if (Number.isFinite(routeTankId) && routeTankId > 0) {
+      setSelectedTankId(routeTankId);
+    }
+  }, [routeTankId]);
+
   function confirmDelete(test: WaterTest) {
     Alert.alert('Delete test?', `Delete the ${formatDate(test.tested_at)} test for ${test.tank_name}?`, [
       { text: 'Cancel', style: 'cancel' },
@@ -98,6 +111,35 @@ export default function HistoryScreen() {
     }
   }
 
+  async function addTestFromHistory() {
+    if (selectedTankId) {
+      await setDefaultTankId(selectedTankId);
+    }
+
+    router.push('/add-test' as never);
+  }
+
+  const trendTankIds = Array.from(
+    new Set(tests.map((test) => test.tank_id).filter((id): id is number => id !== null)),
+  );
+  const chartTankId = selectedTankId ?? (trendTankIds.length === 1 ? trendTankIds[0] : null);
+  const chartTank = tanks.find((tank) => tank.id === chartTankId) ?? null;
+  const chartPoints: TrendPoint[] =
+    chartTankId === null
+      ? []
+      : tests
+          .filter((test) => test.tank_id === chartTankId && test[selectedAnalyte] !== null)
+          .map((test) => ({
+            id: test.id,
+            testedAt: test.tested_at,
+            tankName: test.tank_name || 'Unnamed tank',
+            value: test[selectedAnalyte] ?? 0,
+            didWaterChange: Boolean(test.did_water_change),
+          }));
+  const chartRange = rangesByTank[chartTankId ?? -1]?.find(
+    (range) => range.analyte_key === selectedAnalyte,
+  );
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.headerRow}>
@@ -118,6 +160,57 @@ export default function HistoryScreen() {
         includeAllOption
       />
 
+      {!isLoading && !errorMessage && tests.length > 0 ? (
+        <View style={styles.trendsPanel}>
+          <View style={styles.trendsHeader}>
+            <View>
+              <Text style={styles.trendsTitle}>Trends</Text>
+              <Text style={styles.trendsSubtitle}>
+                {chartTank ? chartTank.name : 'Select one tank to chart readings'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.analyteRow}>
+            {chartAnalytes.map((analyte) => {
+              const selected = analyte === selectedAnalyte;
+
+              return (
+                <Pressable
+                  key={analyte}
+                  style={[styles.analyteButton, selected ? styles.selectedAnalyteButton : null]}
+                  onPress={() => setSelectedAnalyte(analyte)}>
+                  <Text
+                    style={[
+                      styles.analyteButtonText,
+                      selected ? styles.selectedAnalyteButtonText : null,
+                    ]}>
+                    {ANALYTE_LABELS[analyte]}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {chartTankId ? (
+            <WaterTrendChart
+              analyteKey={selectedAnalyte}
+              points={chartPoints}
+              range={chartRange}
+              onEditPoint={(id) =>
+                router.push({ pathname: '/edit-test', params: { id: String(id) } } as never)
+              }
+            />
+          ) : (
+            <View style={styles.chartPrompt}>
+              <Text style={styles.mutedText}>
+                Trends are easiest to read one tank at a time. Choose a tank from History scope.
+              </Text>
+            </View>
+          )}
+        </View>
+      ) : null}
+
       {isLoading ? <Text style={styles.mutedText}>Loading tests...</Text> : null}
       {!isLoading && errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
@@ -129,14 +222,21 @@ export default function HistoryScreen() {
               ? 'This tank does not have any readings yet.'
               : 'Your saved readings will appear here newest first.'}
           </Text>
-          <Pressable style={styles.primaryButton} onPress={() => router.push('/add-test' as never)}>
+          <Pressable style={styles.primaryButton} onPress={addTestFromHistory}>
             <Text style={styles.primaryButtonText}>Add First Test</Text>
           </Pressable>
         </View>
       ) : null}
 
-      {tests.map((test) => {
+      {tests.map((test, index) => {
         const status = getOverallStatus(test, test.tank_id ? rangesByTank[test.tank_id] : []);
+        const previousTest =
+          test.tank_id === null
+            ? null
+            : tests.find(
+                (candidate, candidateIndex) =>
+                  candidateIndex > index && candidate.tank_id === test.tank_id,
+              ) ?? null;
 
         return (
           <View key={test.id} style={styles.card}>
@@ -148,15 +248,9 @@ export default function HistoryScreen() {
               <StatusBadge status={status} />
             </View>
 
-            <Text style={styles.values}>
-              {[
-                valueText('NO3', test.nitrate_no3),
-                valueText('NO2', test.nitrite_no2),
-                valueText('pH', test.ph),
-                valueText('KH', test.kh),
-                valueText('GH', test.gh),
-              ].join('  |  ')}
-            </Text>
+            <ReadingValueGrid test={test} ranges={test.tank_id ? rangesByTank[test.tank_id] : []} />
+            <StatusInsight test={test} ranges={test.tank_id ? rangesByTank[test.tank_id] : []} />
+            <TrendStrip test={test} previousTest={previousTest} />
 
             {test.notes ? <Text style={styles.notes}>{test.notes}</Text> : null}
 
@@ -226,6 +320,63 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '700',
   },
+  trendsPanel: {
+    backgroundColor: AquariumTheme.surfaceMint,
+    borderColor: AquariumTheme.borderMint,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 12,
+    padding: 14,
+  },
+  trendsHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  trendsTitle: {
+    color: AquariumTheme.primaryDark,
+    fontSize: 21,
+    fontWeight: '900',
+  },
+  trendsSubtitle: {
+    color: AquariumTheme.muted,
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  analyteRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  analyteButton: {
+    backgroundColor: AquariumTheme.surface,
+    borderColor: AquariumTheme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  selectedAnalyteButton: {
+    backgroundColor: AquariumTheme.primary,
+    borderColor: AquariumTheme.primary,
+  },
+  analyteButtonText: {
+    color: AquariumTheme.primary,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  selectedAnalyteButtonText: {
+    color: '#ffffff',
+  },
+  chartPrompt: {
+    backgroundColor: AquariumTheme.surface,
+    borderColor: AquariumTheme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 14,
+  },
   card: {
     backgroundColor: AquariumTheme.surface,
     borderColor: AquariumTheme.border,
@@ -253,11 +404,6 @@ const styles = StyleSheet.create({
     color: AquariumTheme.text,
     fontSize: 18,
     fontWeight: '700',
-  },
-  values: {
-    color: AquariumTheme.text,
-    fontSize: 15,
-    lineHeight: 22,
   },
   notes: {
     color: AquariumTheme.muted,

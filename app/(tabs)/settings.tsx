@@ -3,11 +3,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { TankDropdown } from '@/components/tank-dropdown';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { AquariumTheme } from '@/constants/aquarium-theme';
 import {
   DEFAULT_ANALYTE_RANGES,
   deleteWaterTestsForTank,
   getAnalyteRanges,
+  getAllWaterTests,
   getDefaultTankId,
   getNotificationReminders,
   getTank,
@@ -18,6 +20,8 @@ import {
   type NotificationReminder,
   type Tank,
 } from '@/lib/database';
+import { shareWaterTestsCsv } from '@/lib/export-csv';
+import { pickAndImportWaterTestsCsv } from '@/lib/import-csv';
 import {
   createReminderNotification,
   DEFAULT_REMINDER_SCHEDULE,
@@ -28,17 +32,17 @@ import {
   type ReminderMode,
   type ReminderSchedule,
 } from '@/lib/reminders';
-
-const ANALYTE_LABELS: Record<AnalyteKey, string> = {
-  nitrate_no3: 'NO3 nitrate',
-  nitrite_no2: 'NO2 nitrite',
-  ph: 'pH',
-  kh: 'KH',
-  gh: 'GH',
-};
+import { ANALYTE_LABELS } from '@/lib/water-status';
 
 type RangeInputState = Record<AnalyteKey, { low: string; high: string }>;
-type SettingsSection = 'home' | 'createNotification' | 'manageNotifications' | 'ranges' | 'dataControls';
+type SettingsSection =
+  | 'home'
+  | 'createNotification'
+  | 'manageNotifications'
+  | 'ranges'
+  | 'backup'
+  | 'about'
+  | 'dataControls';
 
 const HOUR_VALUES = Array.from({ length: 24 }, (_, index) => index + 1);
 const DAY_VALUES = Array.from({ length: 60 }, (_, index) => index + 1);
@@ -83,10 +87,22 @@ function formatShortDate(value: string) {
   return new Date(value).toLocaleDateString();
 }
 
+function formatNextReminder(schedule: ReminderSchedule) {
+  const hours = schedule.mode === 'hours' ? schedule.interval : schedule.interval * 24;
+  const nextReminder = new Date(Date.now() + hours * 60 * 60 * 1000);
+
+  return nextReminder.toLocaleString(undefined, {
+    weekday: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 function HeaderBack({ title, onBack }: { title: string; onBack: () => void }) {
   return (
     <View style={styles.detailHeader}>
       <Pressable style={styles.backButton} onPress={onBack}>
+        <IconSymbol name="arrow.left" color={AquariumTheme.primary} size={18} />
         <Text style={styles.backButtonText}>Back</Text>
       </Pressable>
       <Text style={styles.title}>{title}</Text>
@@ -153,6 +169,8 @@ export default function SettingsScreen() {
   const [isSavingRanges, setIsSavingRanges] = useState(false);
   const [isDeletingTankTests, setIsDeletingTankTests] = useState(false);
   const [isResettingData, setIsResettingData] = useState(false);
+  const [isExportingBackup, setIsExportingBackup] = useState(false);
+  const [isImportingBackup, setIsImportingBackup] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
   const loadSettings = useCallback(async () => {
@@ -339,6 +357,21 @@ export default function SettingsScreen() {
       return;
     }
 
+    const reversedRange = parsedRanges.find(
+      (range) =>
+        range.low_value !== null &&
+        range.high_value !== null &&
+        range.low_value > range.high_value,
+    );
+
+    if (reversedRange) {
+      Alert.alert(
+        'Check target range',
+        `${ANALYTE_LABELS[reversedRange.analyte_key]} low value must be less than the high value.`,
+      );
+      return;
+    }
+
     try {
       setIsSavingRanges(true);
       await Promise.all(parsedRanges.map((range) => saveAnalyteRange(rangeTankId, range)));
@@ -414,30 +447,98 @@ export default function SettingsScreen() {
     );
   }
 
+  async function exportAllTests() {
+    try {
+      setIsExportingBackup(true);
+      const tests = await getAllWaterTests();
+      await shareWaterTestsCsv(tests);
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Export failed', error instanceof Error ? error.message : 'Could not export CSV.');
+    } finally {
+      setIsExportingBackup(false);
+    }
+  }
+
+  function confirmImportCsv() {
+    Alert.alert(
+      'Import CSV backup?',
+      'This adds tests from an Aquarium Water Log CSV. Existing matching rows are skipped, and missing tanks are created by name.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Choose CSV',
+          onPress: async () => {
+            try {
+              setIsImportingBackup(true);
+              const result = await pickAndImportWaterTestsCsv();
+
+              if (!result) {
+                return;
+              }
+
+              await loadSettings();
+              setToastMessage(
+                `Imported ${result.imported}; skipped ${result.skipped}; tanks created ${result.tanksCreated}.`,
+              );
+            } catch (error) {
+              console.error(error);
+              Alert.alert('Import failed', error instanceof Error ? error.message : 'Could not import CSV.');
+            } finally {
+              setIsImportingBackup(false);
+            }
+          },
+        },
+      ],
+    );
+  }
+
   function renderSettingsHome() {
     return (
       <>
         <Text style={styles.title}>Settings</Text>
         <View style={styles.tileGrid}>
           <Pressable style={styles.tile} onPress={() => setActiveSection('manageNotifications')}>
-            <Text style={styles.tileIcon}>N</Text>
+            <View style={styles.tileIcon}>
+              <IconSymbol name="bell.fill" color={AquariumTheme.primary} size={23} />
+            </View>
             <Text style={styles.tileTitle}>Manage Notifications</Text>
             <Text style={styles.tileText}>Review and delete active reminders</Text>
           </Pressable>
           <Pressable style={styles.tile} onPress={() => setActiveSection('createNotification')}>
-            <Text style={styles.tileIcon}>+</Text>
+            <View style={styles.tileIcon}>
+              <IconSymbol name="bell.badge.fill" color={AquariumTheme.primary} size={23} />
+            </View>
             <Text style={styles.tileTitle}>Create Notification</Text>
             <Text style={styles.tileText}>Add a tank-specific testing reminder</Text>
           </Pressable>
           <Pressable style={styles.tile} onPress={() => setActiveSection('ranges')}>
-            <Text style={styles.tileIcon}>pH</Text>
+            <View style={styles.tileIcon}>
+              <IconSymbol name="target" color={AquariumTheme.primary} size={23} />
+            </View>
             <Text style={styles.tileTitle}>Target Ranges</Text>
             <Text style={styles.tileText}>Low and high values by tank</Text>
           </Pressable>
           <Pressable style={styles.tile} onPress={() => setActiveSection('dataControls')}>
-            <Text style={styles.tileIcon}>DB</Text>
+            <View style={styles.tileIcon}>
+              <IconSymbol name="externaldrive.fill" color={AquariumTheme.primary} size={23} />
+            </View>
             <Text style={styles.tileTitle}>Local Data</Text>
             <Text style={styles.tileText}>Delete tank tests or reset this device</Text>
+          </Pressable>
+          <Pressable style={styles.tile} onPress={() => setActiveSection('backup')}>
+            <View style={styles.tileIcon}>
+              <IconSymbol name="square.and.arrow.down.fill" color={AquariumTheme.primary} size={23} />
+            </View>
+            <Text style={styles.tileTitle}>Backup & Import</Text>
+            <Text style={styles.tileText}>Export or restore CSV water tests</Text>
+          </Pressable>
+          <Pressable style={styles.tile} onPress={() => setActiveSection('about')}>
+            <View style={styles.tileIcon}>
+              <IconSymbol name="info.circle.fill" color={AquariumTheme.primary} size={23} />
+            </View>
+            <Text style={styles.tileTitle}>About & Help</Text>
+            <Text style={styles.tileText}>Privacy, status labels, and target ranges</Text>
           </Pressable>
         </View>
       </>
@@ -487,6 +588,7 @@ export default function SettingsScreen() {
                 <Text style={styles.unitWheelText}>{unitLabel}</Text>
               </View>
             </View>
+            <Text style={styles.previewText}>Next reminder: {formatNextReminder(reminderSchedule)}</Text>
           </View>
 
           <Pressable style={styles.primaryButton} onPress={saveReminder} disabled={isSavingReminder}>
@@ -646,12 +748,91 @@ export default function SettingsScreen() {
     );
   }
 
+  function renderBackup() {
+    return (
+      <>
+        <HeaderBack title="Backup & Import" onBack={() => setActiveSection('home')} />
+        <View style={styles.panel}>
+          <Text style={styles.panelTitle}>CSV Backup</Text>
+          <Text style={styles.helpText}>
+            Export creates a CSV you can save to cloud storage, email to yourself, or move to
+            another device. Import merges rows from an Aquarium Water Log CSV.
+          </Text>
+
+          <View style={styles.infoPanel}>
+            <Text style={styles.infoTitle}>What import does</Text>
+            <Text style={styles.helpText}>Creates missing tanks by name.</Text>
+            <Text style={styles.helpText}>Adds new water tests.</Text>
+            <Text style={styles.helpText}>Skips rows that already match existing readings.</Text>
+          </View>
+
+          <Pressable
+            style={[styles.primaryButton, isExportingBackup ? styles.disabledButton : null]}
+            onPress={exportAllTests}
+            disabled={isExportingBackup}>
+            <Text style={styles.primaryButtonText}>
+              {isExportingBackup ? 'Exporting...' : 'Export All Tests CSV'}
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.secondaryWideButton, isImportingBackup ? styles.disabledButton : null]}
+            onPress={confirmImportCsv}
+            disabled={isImportingBackup}>
+            <Text style={styles.secondaryWideButtonText}>
+              {isImportingBackup ? 'Importing...' : 'Import Tests From CSV'}
+            </Text>
+          </Pressable>
+        </View>
+      </>
+    );
+  }
+
+  function renderAbout() {
+    return (
+      <>
+        <HeaderBack title="About & Help" onBack={() => setActiveSection('home')} />
+        <View style={styles.panel}>
+          <Text style={styles.panelTitle}>Aquarium Water Log</Text>
+          <Text style={styles.helpText}>
+            This app is local-first. Tanks, readings, target ranges, reminders, and settings are
+            stored on this device. There is no account, backend, cloud sync, ads, or subscription.
+          </Text>
+
+          <View style={styles.infoPanel}>
+            <Text style={styles.infoTitle}>Status Labels</Text>
+            <Text style={styles.helpText}>Good: measured values are within target.</Text>
+            <Text style={styles.helpText}>Caution: one or more values are outside target.</Text>
+            <Text style={styles.helpText}>Danger: a value needs immediate attention, such as NO2 above zero.</Text>
+          </View>
+
+          <View style={styles.infoPanel}>
+            <Text style={styles.infoTitle}>Target Ranges</Text>
+            <Text style={styles.helpText}>
+              Target ranges let each tank have its own low and high values for NO3, NO2, pH, KH,
+              and GH. Empty low or high values mean that side of the target is not checked.
+            </Text>
+          </View>
+
+          <View style={styles.infoPanel}>
+            <Text style={styles.infoTitle}>Backups</Text>
+            <Text style={styles.helpText}>
+              CSV export is the portable backup format. Keep a copy outside the app before
+              uninstalling, changing phones, or resetting local data.
+            </Text>
+          </View>
+        </View>
+      </>
+    );
+  }
+
   return (
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       {activeSection === 'home' ? renderSettingsHome() : null}
       {activeSection === 'manageNotifications' ? renderManageNotifications() : null}
       {activeSection === 'createNotification' ? renderCreateNotification() : null}
       {activeSection === 'ranges' ? renderRangeSettings() : null}
+      {activeSection === 'backup' ? renderBackup() : null}
+      {activeSection === 'about' ? renderAbout() : null}
       {activeSection === 'dataControls' ? renderDataControls() : null}
 
       {toastMessage ? <Text style={styles.toast}>{toastMessage}</Text> : null}
@@ -676,11 +857,14 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   backButton: {
+    alignItems: 'center',
     alignSelf: 'flex-start',
     backgroundColor: AquariumTheme.surface,
     borderColor: AquariumTheme.border,
     borderRadius: 8,
     borderWidth: 1,
+    flexDirection: 'row',
+    gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
@@ -709,17 +893,14 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
   },
   tileIcon: {
+    alignItems: 'center',
     alignSelf: 'flex-start',
     backgroundColor: AquariumTheme.surfaceMint,
     borderRadius: 8,
-    color: AquariumTheme.primary,
-    fontSize: 18,
-    fontWeight: '900',
+    height: 40,
+    justifyContent: 'center',
     minWidth: 38,
-    overflow: 'hidden',
     paddingHorizontal: 8,
-    paddingVertical: 6,
-    textAlign: 'center',
   },
   tileTitle: {
     color: AquariumTheme.text,
@@ -843,6 +1024,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '800',
   },
+  previewText: {
+    color: AquariumTheme.primaryDark,
+    fontSize: 14,
+    fontWeight: '800',
+  },
   optionGroup: {
     gap: 10,
   },
@@ -936,6 +1122,32 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 10,
     padding: 14,
+  },
+  infoPanel: {
+    backgroundColor: AquariumTheme.surfaceBlue,
+    borderColor: AquariumTheme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    gap: 8,
+    padding: 14,
+  },
+  infoTitle: {
+    color: AquariumTheme.primaryDark,
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  secondaryWideButton: {
+    alignItems: 'center',
+    backgroundColor: AquariumTheme.surfaceBlue,
+    borderColor: AquariumTheme.border,
+    borderRadius: 8,
+    borderWidth: 1,
+    padding: 14,
+  },
+  secondaryWideButtonText: {
+    color: AquariumTheme.primary,
+    fontSize: 16,
+    fontWeight: '800',
   },
   warningTitle: {
     color: '#9a3412',
