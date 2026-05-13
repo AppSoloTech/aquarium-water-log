@@ -1,14 +1,14 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { AquariumTheme } from '@/constants/aquarium-theme';
 import type { AnalyteKey, AnalyteRange, WaterTest } from '@/lib/database';
 import {
   ANALYTE_LABELS,
   getReadingIssues,
-  getStatusColor,
   getStatusSummary,
   type ReadingIssue,
+  type ReadingStatus,
 } from '@/lib/water-status';
+import { useTheme, type ColorTokens } from '@/theme';
 
 const readingKeys: AnalyteKey[] = ['nitrate_no3', 'nitrite_no2', 'ph', 'kh', 'gh'];
 const trendKeys: AnalyteKey[] = ['nitrate_no3', 'nitrite_no2', 'ph'];
@@ -18,37 +18,43 @@ function getValue(test: WaterTest, key: AnalyteKey) {
 }
 
 function formatValue(value: number | null) {
-  return value === null ? '-' : String(value);
+  return value === null ? '—' : String(value);
 }
 
 function trendText(current: number, previous: number) {
   const delta = Number((current - previous).toFixed(2));
-
-  if (delta === 0) {
-    return 'same';
-  }
-
+  if (delta === 0) return 'same';
   return `${delta > 0 ? '+' : ''}${delta}`;
 }
 
-function getTrendTone(key: AnalyteKey, current: number, previous: number) {
-  if (current === previous) {
-    return AquariumTheme.muted;
-  }
-
+function getTrendTone(key: AnalyteKey, current: number, previous: number, c: ColorTokens) {
+  if (current === previous) return c.textMuted;
   if (key === 'nitrate_no3' || key === 'nitrite_no2') {
-    return current < previous ? AquariumTheme.teal : AquariumTheme.coral;
+    // Lower is better for nitrogenous compounds.
+    return current < previous ? c.success : c.warning;
   }
+  return c.primary;
+}
 
-  return AquariumTheme.primary;
+function issueStatusColor(status: ReadingStatus, c: ColorTokens) {
+  if (status === 'Danger') return c.danger;
+  if (status === 'Caution') return c.warning;
+  return c.success;
 }
 
 function issueMapByKey(issues: ReadingIssue[]) {
   return issues.reduce<Record<string, ReadingIssue>>((result, issue) => {
     result[issue.analyteKey] = issue;
-
     return result;
   }, {});
+}
+
+function tinted(color: string, alpha = 0.1) {
+  if (!/^#[0-9a-fA-F]{6}$/.test(color)) return color;
+  const a = Math.round(alpha * 255)
+    .toString(16)
+    .padStart(2, '0');
+  return `${color}${a}`;
 }
 
 export function ReadingValueGrid({
@@ -58,23 +64,43 @@ export function ReadingValueGrid({
   test: WaterTest;
   ranges: AnalyteRange[];
 }) {
+  const theme = useTheme();
   const issues = issueMapByKey(getReadingIssues(test, ranges));
 
   return (
-    <View style={styles.grid}>
+    <View style={[styles.grid, { gap: theme.spacing.sm }]}>
       {readingKeys.map((key) => {
         const issue = issues[key];
-        const color = issue ? getStatusColor(issue.status) : AquariumTheme.teal;
+        const accentColor = issue ? issueStatusColor(issue.status, theme.colors) : theme.colors.accent;
+        const tone = issue ? accentColor : theme.colors.text;
 
         return (
           <View
             key={key}
             style={[
               styles.valueChip,
-              issue ? { borderColor: color, backgroundColor: `${color}12` } : null,
-            ]}>
-            <Text style={[styles.valueLabel, issue ? { color } : null]}>{ANALYTE_LABELS[key]}</Text>
-            <Text style={[styles.valueNumber, issue ? { color } : null]}>
+              {
+                backgroundColor: issue ? tinted(accentColor, 0.1) : theme.colors.surfaceMuted,
+                borderColor: issue ? accentColor : theme.colors.border,
+                borderRadius: theme.radius.md,
+                paddingHorizontal: theme.spacing.md,
+                paddingVertical: theme.spacing.sm,
+              },
+            ]}
+            accessibilityRole="text"
+            accessibilityLabel={`${ANALYTE_LABELS[key]} ${formatValue(getValue(test, key))}`}>
+            <Text
+              style={[
+                theme.typography.caption,
+                { color: issue ? accentColor : theme.colors.textMuted },
+              ]}>
+              {ANALYTE_LABELS[key]}
+            </Text>
+            <Text
+              style={[
+                theme.typography.titleMd,
+                { color: tone, marginTop: 2, fontVariant: ['tabular-nums'] },
+              ]}>
               {formatValue(getValue(test, key))}
             </Text>
           </View>
@@ -91,13 +117,28 @@ export function StatusInsight({
   test: WaterTest | null;
   ranges: AnalyteRange[];
 }) {
+  const theme = useTheme();
   const issues = getReadingIssues(test, ranges);
 
   return (
-    <View style={styles.insight}>
-      <Text style={styles.insightText}>{getStatusSummary(test, ranges)}</Text>
+    <View
+      style={[
+        styles.insight,
+        {
+          backgroundColor: theme.colors.surfaceAccent,
+          borderColor: theme.colors.borderAccent,
+          borderRadius: theme.radius.md,
+          gap: theme.spacing.xs,
+          padding: theme.spacing.md,
+        },
+      ]}>
+      <Text style={[theme.typography.titleSm, { color: theme.colors.text }]}>
+        {getStatusSummary(test, ranges)}
+      </Text>
       {issues.slice(1, 3).map((issue) => (
-        <Text key={issue.analyteKey} style={styles.insightSecondary}>
+        <Text
+          key={issue.analyteKey}
+          style={[theme.typography.bodySm, { color: theme.colors.textMuted }]}>
           {issue.message}
         </Text>
       ))}
@@ -112,37 +153,44 @@ export function TrendStrip({
   test: WaterTest;
   previousTest: WaterTest | null;
 }) {
-  if (!previousTest) {
-    return null;
-  }
+  const theme = useTheme();
+  if (!previousTest) return null;
 
   const trends = trendKeys
     .map((key) => {
       const current = getValue(test, key);
       const previous = getValue(previousTest, key);
-
-      if (current === null || previous === null) {
-        return null;
-      }
-
+      if (current === null || previous === null) return null;
       return { key, current, previous };
     })
     .filter((trend): trend is { key: AnalyteKey; current: number; previous: number } => trend !== null);
 
-  if (trends.length === 0) {
-    return null;
-  }
+  if (trends.length === 0) return null;
 
   return (
-    <View style={styles.trendRow}>
-      <Text style={styles.trendLead}>Since previous</Text>
+    <View style={[styles.trendRow, { gap: theme.spacing.sm }]}>
+      <Text style={[theme.typography.caption, { color: theme.colors.textMuted }]}>Since previous</Text>
       {trends.map((trend) => {
-        const color = getTrendTone(trend.key, trend.current, trend.previous);
-
+        const color = getTrendTone(trend.key, trend.current, trend.previous, theme.colors);
         return (
-          <View key={trend.key} style={styles.trendChip}>
-            <Text style={styles.trendLabel}>{ANALYTE_LABELS[trend.key]}</Text>
-            <Text style={[styles.trendValue, { color }]}>
+          <View
+            key={trend.key}
+            style={[
+              styles.trendChip,
+              {
+                backgroundColor: theme.colors.surface,
+                borderColor: theme.colors.border,
+                borderRadius: theme.radius.pill,
+                gap: 5,
+                paddingHorizontal: theme.spacing.md,
+                paddingVertical: 4,
+              },
+            ]}>
+            <Text style={[theme.typography.caption, { color: theme.colors.textMuted }]}>
+              {ANALYTE_LABELS[trend.key]}
+            </Text>
+            <Text
+              style={[theme.typography.caption, { color, fontVariant: ['tabular-nums'] }]}>
               {trendText(trend.current, trend.previous)}
             </Text>
           </View>
@@ -156,76 +204,22 @@ const styles = StyleSheet.create({
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
   },
   valueChip: {
-    backgroundColor: AquariumTheme.surfaceBlue,
-    borderColor: AquariumTheme.border,
-    borderRadius: 8,
     borderWidth: 1,
-    minWidth: 86,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-  },
-  valueLabel: {
-    color: AquariumTheme.muted,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  valueNumber: {
-    color: AquariumTheme.text,
-    fontSize: 17,
-    fontWeight: '900',
-    marginTop: 2,
+    minWidth: 88,
   },
   insight: {
-    backgroundColor: AquariumTheme.surfaceMint,
-    borderColor: AquariumTheme.borderMint,
-    borderRadius: 8,
     borderWidth: 1,
-    gap: 4,
-    padding: 10,
-  },
-  insightText: {
-    color: AquariumTheme.text,
-    fontSize: 14,
-    fontWeight: '800',
-    lineHeight: 20,
-  },
-  insightSecondary: {
-    color: AquariumTheme.muted,
-    fontSize: 13,
-    lineHeight: 18,
   },
   trendRow: {
     alignItems: 'center',
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-  },
-  trendLead: {
-    color: AquariumTheme.muted,
-    fontSize: 13,
-    fontWeight: '700',
   },
   trendChip: {
     alignItems: 'center',
-    backgroundColor: AquariumTheme.surface,
-    borderColor: AquariumTheme.borderSoft,
-    borderRadius: 8,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-  },
-  trendLabel: {
-    color: AquariumTheme.muted,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  trendValue: {
-    fontSize: 13,
-    fontWeight: '900',
   },
 });

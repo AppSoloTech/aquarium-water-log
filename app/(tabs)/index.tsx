@@ -1,10 +1,17 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { ReadingValueGrid, StatusInsight } from '@/components/reading-summary';
-import { StatusBadge } from '@/components/status-badge';
-import { AquariumTheme } from '@/constants/aquarium-theme';
+import {
+  Button,
+  Card,
+  EmptyState,
+  Screen,
+  Section,
+  SkeletonReadingCard,
+  StatusPill,
+} from '@/components/ui';
 import {
   getAnalyteRanges,
   getLatestWaterTestsByTank,
@@ -16,27 +23,30 @@ import {
   type WaterTest,
 } from '@/lib/database';
 import { getOverallStatus } from '@/lib/water-status';
+import { useTheme } from '@/theme';
 
 function formatDate(value: string) {
   return new Date(value).toLocaleString();
 }
 
 function daysSince(value: string | null) {
-  if (!value) {
-    return null;
-  }
-
+  if (!value) return null;
   const testedAt = new Date(value).getTime();
-
-  if (Number.isNaN(testedAt)) {
-    return null;
-  }
-
+  if (Number.isNaN(testedAt)) return null;
   return Math.max(0, Math.floor((Date.now() - testedAt) / (1000 * 60 * 60 * 24)));
+}
+
+function lastTestedSummary(value: string | null) {
+  const days = daysSince(value);
+  if (days === null) return 'No test date yet';
+  if (days === 0) return 'Tested today';
+  if (days === 1) return '1 day since last test';
+  return `${days} days since last test`;
 }
 
 export default function HomeScreen() {
   const router = useRouter();
+  const theme = useTheme();
   const [latestTests, setLatestTests] = useState<WaterTest[]>([]);
   const [rangesByTank, setRangesByTank] = useState<Record<number, AnalyteRange[]>>({});
   const [tanks, setTanks] = useState<TankSummary[]>([]);
@@ -79,7 +89,6 @@ export default function HomeScreen() {
     if (test.tank_id) {
       result[test.tank_id] = test;
     }
-
     return result;
   }, {});
   const totalTests = tanks.reduce((sum, tank) => sum + tank.test_count, 0);
@@ -90,271 +99,180 @@ export default function HomeScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.hero}>
-        <Text style={styles.title}>Aquarium Water Log</Text>
-        <Text style={styles.subtitle}>Manage tanks, then log each water test under the right tank.</Text>
-      </View>
+    <Screen>
+      <Card variant="primary" elevation="md" padding="lg">
+        <Text
+          style={[theme.typography.displayMd, { color: theme.colors.primaryContent }]}
+          accessibilityRole="header">
+          Aquarium Water Log
+        </Text>
+        <Text style={[theme.typography.bodyLg, styles.heroSub, { color: theme.colors.primaryContent }]}>
+          Manage tanks, then log each water test under the right tank.
+        </Text>
+      </Card>
 
-      <View style={styles.panel}>
-        <View style={styles.panelHeader}>
-          <Text style={styles.panelTitle}>Your Tanks</Text>
-          <Text style={styles.countText}>{tanks.length}</Text>
-        </View>
-
-        {tanks.length === 0 ? (
-          <Text style={styles.mutedText}>Create your first tank to start logging scoped tests.</Text>
-        ) : null}
-
-        {tanks.map((tank) => (
-          <View key={tank.id} style={styles.tankRow}>
-            <View style={styles.tankRowText}>
-              <Text style={styles.tankName}>{tank.name}</Text>
-              <Text style={styles.mutedText}>
-                {tank.test_count} {tank.test_count === 1 ? 'test' : 'tests'} • Last:{' '}
-                {tank.latest_tested_at ? formatDate(tank.latest_tested_at) : 'No tests yet'}
-              </Text>
+      {tanks.length > 0 ? (
+        <Section
+          title="Your Tanks"
+          trailing={
+            <Text
+              style={[theme.typography.titleLg, { color: theme.colors.accent }]}
+              accessibilityLabel={`${tanks.length} tanks`}>
+              {tanks.length}
+            </Text>
+          }>
+          <Card variant="muted" elevation="none" padding="md">
+            <View style={{ gap: theme.spacing.sm }}>
+              {tanks.map((tank, index) => (
+                <View
+                  key={tank.id}
+                  style={[
+                    styles.tankRow,
+                    index > 0 && {
+                      borderTopColor: theme.colors.border,
+                      borderTopWidth: StyleSheet.hairlineWidth,
+                      paddingTop: theme.spacing.sm,
+                    },
+                  ]}>
+                  <Text style={[theme.typography.titleSm, { color: theme.colors.text }]}>
+                    {tank.name}
+                  </Text>
+                  <Text style={[theme.typography.bodySm, { color: theme.colors.textMuted }]}>
+                    {tank.test_count} {tank.test_count === 1 ? 'test' : 'tests'} •{' '}
+                    {tank.latest_tested_at ? formatDate(tank.latest_tested_at) : 'No tests yet'}
+                  </Text>
+                </View>
+              ))}
             </View>
-          </View>
-        ))}
-      </View>
+          </Card>
+        </Section>
+      ) : null}
 
       {tanks.length > 0 && totalTests < 1 ? (
-        <View style={styles.checklistPanel}>
-          <Text style={styles.panelTitle}>Quick Start</Text>
-          <Text style={styles.checkItem}>Done: Create a tank</Text>
-          <Text style={styles.checkItem}>Next: Log your first water test</Text>
-          <Text style={styles.checkItem}>Later: Set target ranges and reminders</Text>
-          <Pressable
-            style={styles.primaryButton}
-            onPress={() => logTankTest(tanks[0].id)}>
-            <Text style={styles.primaryButtonText}>Log First Test</Text>
-          </Pressable>
-        </View>
+        <Card variant="warning" elevation="sm" padding="md">
+          <Text style={[theme.typography.titleMd, { color: theme.colors.text }]}>Quick Start</Text>
+          <Text style={[theme.typography.bodyMd, { color: theme.colors.text }]}>
+            ✓ Create a tank
+          </Text>
+          <Text style={[theme.typography.bodyMd, { color: theme.colors.text }]}>
+            → Log your first water test
+          </Text>
+          <Text style={[theme.typography.bodyMd, { color: theme.colors.textMuted }]}>
+            Later: set target ranges and reminders
+          </Text>
+          <Button
+            label="Log First Test"
+            onPress={() => logTankTest(tanks[0].id)}
+            leftIcon="plus.circle.fill"
+            fullWidth
+            accessibilityHint="Opens the add test screen for your first tank"
+          />
+        </Card>
       ) : null}
 
-      <Text style={styles.sectionTitle}>Latest Reading</Text>
+      <Section title="Latest Reading">
+        {isLoading ? (
+          <View style={{ gap: theme.spacing.md }}>
+            <SkeletonReadingCard />
+            <SkeletonReadingCard />
+          </View>
+        ) : null}
 
-      {isLoading ? <Text style={styles.mutedText}>Loading latest readings...</Text> : null}
+        {!isLoading && errorMessage ? (
+          <Card variant="warning" padding="md" elevation="none">
+            <Text style={[theme.typography.bodyMd, { color: theme.colors.danger }]}>
+              {errorMessage}
+            </Text>
+          </Card>
+        ) : null}
 
-      {!isLoading && errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+        {!isLoading && !errorMessage && tanks.length === 0 ? (
+          <EmptyState
+            icon="drop.fill"
+            tone="info"
+            title="No tanks yet"
+            description="Create your first tank to start building a reading history."
+            action={{ label: 'Create Tank', onPress: () => router.push('/tanks' as never) }}
+          />
+        ) : null}
 
-      {!isLoading && !errorMessage && tanks.length === 0 ? (
-        <Text style={styles.mutedText}>
-          No tanks yet. Create your first tank to start building a reading history.
-        </Text>
-      ) : null}
+        {!isLoading && !errorMessage && tanks.length > 0
+          ? tanks.map((tank) => {
+              const latestTest = latestByTankId[tank.id] ?? null;
+              const status = getOverallStatus(latestTest, rangesByTank[tank.id] ?? []);
 
-      {!isLoading && !errorMessage && tanks.length > 0
-        ? tanks.map((tank) => {
-            const latestTest = latestByTankId[tank.id] ?? null;
-            const status = getOverallStatus(latestTest, rangesByTank[tank.id] ?? []);
-
-            return (
-              <View key={tank.id} style={styles.readingCard}>
-                <View style={styles.panelHeader}>
-                  <View style={styles.tankRowText}>
-                    <Text style={styles.tankName}>{tank.name}</Text>
-                    <Text style={styles.mutedText}>
-                      {daysSince(tank.latest_tested_at) === null
-                        ? 'No test date yet'
-                        : daysSince(tank.latest_tested_at) === 0
-                          ? 'Tested today'
-                          : `${daysSince(tank.latest_tested_at)} days since last test`}
-                    </Text>
+              return (
+                <Card key={tank.id} variant="standard" elevation="sm" padding="md">
+                  <View style={styles.cardHeader}>
+                    <View style={styles.cardHeaderText}>
+                      <Text style={[theme.typography.titleMd, { color: theme.colors.text }]}>
+                        {tank.name}
+                      </Text>
+                      <Text style={[theme.typography.bodySm, { color: theme.colors.textMuted }]}>
+                        {lastTestedSummary(tank.latest_tested_at)}
+                      </Text>
+                    </View>
+                    {latestTest ? <StatusPill status={status} /> : null}
                   </View>
-                  {latestTest ? <StatusBadge status={status} /> : null}
-                </View>
 
-                {latestTest ? (
-                  <View style={styles.summaryGrid}>
-                    <Text style={styles.mutedText}>Last tested {formatDate(latestTest.tested_at)}</Text>
-                    <ReadingValueGrid test={latestTest} ranges={rangesByTank[tank.id] ?? []} />
-                    <StatusInsight test={latestTest} ranges={rangesByTank[tank.id] ?? []} />
-                    <Text style={styles.valueText}>
-                      Water change: {latestTest.did_water_change ? 'Yes' : 'No'}
+                  {latestTest ? (
+                    <View style={{ gap: theme.spacing.sm }}>
+                      <Text style={[theme.typography.bodySm, { color: theme.colors.textMuted }]}>
+                        Last tested {formatDate(latestTest.tested_at)}
+                      </Text>
+                      <ReadingValueGrid test={latestTest} ranges={rangesByTank[tank.id] ?? []} />
+                      <StatusInsight test={latestTest} ranges={rangesByTank[tank.id] ?? []} />
+                      <Text style={[theme.typography.bodySm, { color: theme.colors.text }]}>
+                        Water change: {latestTest.did_water_change ? 'Yes' : 'No'}
+                      </Text>
+                    </View>
+                  ) : (
+                    <Text style={[theme.typography.bodyMd, { color: theme.colors.textMuted }]}>
+                      No readings logged for this tank yet.
                     </Text>
-                  </View>
-                ) : (
-                  <Text style={styles.mutedText}>No readings logged for this tank yet.</Text>
-                )}
+                  )}
 
-                <View style={styles.cardActions}>
-                  <Pressable style={styles.primaryAction} onPress={() => logTankTest(tank.id)}>
-                    <Text style={styles.primaryActionText}>Log Test</Text>
-                  </Pressable>
-                  <Pressable
-                    style={styles.secondaryAction}
-                    onPress={() =>
-                      router.push({ pathname: '/history', params: { tankId: String(tank.id) } } as never)
-                    }>
-                    <Text style={styles.secondaryActionText}>View History</Text>
-                  </Pressable>
-                </View>
-              </View>
-            );
-          })
-        : null}
-    </ScrollView>
+                  <View style={[styles.cardActions, { gap: theme.spacing.sm }]}>
+                    <Button
+                      label="Log Test"
+                      onPress={() => logTankTest(tank.id)}
+                      leftIcon="plus.circle.fill"
+                      fullWidth
+                      style={styles.flex1}
+                      accessibilityLabel={`Log test for ${tank.name}`}
+                      accessibilityHint="Opens the add test screen for this tank"
+                    />
+                    <Button
+                      label="History"
+                      variant="secondary"
+                      leftIcon="list.bullet"
+                      onPress={() =>
+                        router.push({ pathname: '/history', params: { tankId: String(tank.id) } } as never)
+                      }
+                      fullWidth
+                      style={styles.flex1}
+                      accessibilityLabel={`View history for ${tank.name}`}
+                    />
+                  </View>
+                </Card>
+              );
+            })
+          : null}
+      </Section>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: AquariumTheme.screen,
-    flexGrow: 1,
-    gap: 16,
-    padding: 20,
-    paddingTop: 56,
-  },
-  hero: {
-    backgroundColor: AquariumTheme.primaryDark,
-    borderColor: '#38bdf8',
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 8,
-    padding: 18,
-  },
-  title: {
-    color: '#ffffff',
-    fontSize: 32,
-    fontWeight: '800',
-  },
-  subtitle: {
-    color: '#dff7ff',
-    fontSize: 16,
-    lineHeight: 22,
-  },
-  panel: {
-    backgroundColor: AquariumTheme.surfaceMint,
-    borderColor: AquariumTheme.borderMint,
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 12,
-    elevation: 2,
-    padding: 16,
-    shadowColor: AquariumTheme.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-  },
-  checklistPanel: {
-    backgroundColor: AquariumTheme.surfaceWarm,
-    borderColor: '#fed7aa',
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 10,
-    padding: 16,
-  },
-  checkItem: {
-    color: AquariumTheme.text,
-    fontSize: 15,
-    fontWeight: '700',
-    lineHeight: 22,
-  },
-  panelHeader: {
+  heroSub: { opacity: 0.88 },
+  tankRow: { gap: 2 },
+  cardHeader: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: 12,
     justifyContent: 'space-between',
   },
-  panelTitle: {
-    color: AquariumTheme.primaryDark,
-    fontSize: 20,
-    fontWeight: '800',
-  },
-  sectionTitle: {
-    color: AquariumTheme.primaryDark,
-    fontSize: 22,
-    fontWeight: '800',
-    marginTop: 2,
-  },
-  readingCard: {
-    backgroundColor: AquariumTheme.surfaceBlue,
-    borderColor: AquariumTheme.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 12,
-    elevation: 1,
-    padding: 16,
-    shadowColor: AquariumTheme.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-  },
-  tankName: {
-    color: AquariumTheme.text,
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  summaryGrid: {
-    gap: 8,
-  },
-  valueText: {
-    color: AquariumTheme.text,
-    fontSize: 16,
-  },
-  cardActions: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  primaryButton: {
-    alignItems: 'center',
-    backgroundColor: AquariumTheme.primary,
-    borderRadius: 8,
-    padding: 14,
-  },
-  primaryButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  primaryAction: {
-    alignItems: 'center',
-    backgroundColor: AquariumTheme.primary,
-    borderRadius: 8,
-    flex: 1,
-    padding: 12,
-  },
-  primaryActionText: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  secondaryAction: {
-    alignItems: 'center',
-    backgroundColor: AquariumTheme.surface,
-    borderColor: AquariumTheme.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    flex: 1,
-    padding: 12,
-  },
-  secondaryActionText: {
-    color: AquariumTheme.primary,
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  mutedText: {
-    color: AquariumTheme.muted,
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  errorText: {
-    color: AquariumTheme.danger,
-    fontSize: 15,
-  },
-  countText: {
-    color: AquariumTheme.coral,
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  tankRow: {
-    borderTopColor: AquariumTheme.borderMint,
-    borderTopWidth: 1,
-    paddingTop: 12,
-  },
-  tankRowText: {
-    gap: 2,
-  },
+  cardHeaderText: { flexShrink: 1, gap: 2 },
+  cardActions: { flexDirection: 'row' },
+  flex1: { flex: 1 },
 });
