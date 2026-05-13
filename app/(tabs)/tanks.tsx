@@ -1,8 +1,8 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 
-import { AquariumTheme } from '@/constants/aquarium-theme';
+import { Button, Card, Screen, Section, TextField } from '@/components/ui';
 import {
   createTank,
   deleteTank,
@@ -12,6 +12,7 @@ import {
   type TankSummary,
   updateTank,
 } from '@/lib/database';
+import { useTheme } from '@/theme';
 
 function formatDate(value: string | null) {
   return value ? new Date(value).toLocaleDateString() : 'No tests yet';
@@ -19,6 +20,7 @@ function formatDate(value: string | null) {
 
 export default function TanksScreen() {
   const router = useRouter();
+  const theme = useTheme();
   const [tanks, setTanks] = useState<TankSummary[]>([]);
   const [defaultTankId, setDefaultTankIdState] = useState<number | null>(null);
   const [tankName, setTankName] = useState('');
@@ -144,272 +146,182 @@ export default function TanksScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-      <Text style={styles.title}>Tanks</Text>
-      <Text style={styles.subtitle}>Create tanks first, then scope each water test to one tank.</Text>
+    <Screen keyboardAvoiding>
+      <Section
+        title="Tanks"
+        subtitle="Create tanks first, then scope each water test to one tank."
+      />
 
-      <View style={styles.panel}>
-        <Text style={styles.panelTitle}>Add Tank</Text>
-        <View style={styles.field}>
-          <Text style={styles.label}>Tank name</Text>
-          <TextInput
-            style={styles.input}
-            value={tankName}
-            onChangeText={setTankName}
-            placeholder="Example: Living Room 20g"
-          />
-        </View>
-        <View style={styles.field}>
-          <Text style={styles.label}>Notes</Text>
-          <TextInput
-            multiline
-            style={[styles.input, styles.notesInput]}
-            value={notes}
-            onChangeText={setNotes}
-            placeholder="Optional tank details"
-            textAlignVertical="top"
-          />
-        </View>
-        <Pressable style={styles.primaryButton} onPress={addTank} disabled={isSaving}>
-          <Text style={styles.primaryButtonText}>{isSaving ? 'Saving...' : 'Add Tank'}</Text>
-        </Pressable>
-      </View>
+      <Card variant="standard" padding="md" elevation="sm">
+        <Text style={[theme.typography.titleMd, { color: theme.colors.text }]}>Add Tank</Text>
+        <TextField
+          label="Tank name"
+          value={tankName}
+          onChangeText={setTankName}
+          placeholder="Example: Living Room 20g"
+          autoCapitalize="words"
+          returnKeyType="next"
+        />
+        <TextField
+          label="Notes"
+          value={notes}
+          onChangeText={setNotes}
+          placeholder="Optional tank details"
+          multiline
+        />
+        <Button
+          label={isSaving ? 'Saving...' : 'Add Tank'}
+          onPress={addTank}
+          loading={isSaving}
+          leftIcon="plus"
+          fullWidth
+        />
+      </Card>
 
-      {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+      {errorMessage ? (
+        <Card variant="warning" padding="md" elevation="none">
+          <Text style={[theme.typography.bodyMd, { color: theme.colors.danger }]}>{errorMessage}</Text>
+        </Card>
+      ) : null}
 
       {tanks.map((tank) => {
         const isDefault = tank.id === defaultTankId;
         const isEditing = tank.id === editingTankId;
+        const hasTests = tank.test_count > 0;
+
+        if (isEditing) {
+          return (
+            <Card key={tank.id} variant="standard" padding="md" elevation="sm">
+              <TextField
+                label="Tank name"
+                value={editName}
+                onChangeText={setEditName}
+                autoCapitalize="words"
+              />
+              <TextField
+                label="Notes"
+                value={editNotes}
+                onChangeText={setEditNotes}
+                multiline
+              />
+              <View style={[styles.actions, { gap: theme.spacing.sm }]}>
+                <Button
+                  label={isUpdating ? 'Saving...' : 'Save Changes'}
+                  onPress={() => saveTankEdits(tank.id)}
+                  loading={isUpdating}
+                  fullWidth
+                  style={styles.flex1}
+                />
+                <Button
+                  label="Cancel"
+                  variant="ghost"
+                  onPress={cancelEditing}
+                  haptic="none"
+                  fullWidth
+                  style={styles.flex1}
+                />
+              </View>
+            </Card>
+          );
+        }
 
         return (
-          <View key={tank.id} style={styles.card}>
-            {isEditing ? (
-              <>
-                <View style={styles.field}>
-                  <Text style={styles.label}>Tank name</Text>
-                  <TextInput style={styles.input} value={editName} onChangeText={setEditName} />
+          <Card key={tank.id} variant="standard" padding="md" elevation="sm">
+            <View style={styles.cardHeader}>
+              <View style={styles.cardHeaderText}>
+                <Text style={[theme.typography.titleMd, { color: theme.colors.text }]}>
+                  {tank.name}
+                </Text>
+                <Text style={[theme.typography.bodySm, { color: theme.colors.textMuted }]}>
+                  {tank.test_count} {tank.test_count === 1 ? 'test' : 'tests'} • Last:{' '}
+                  {formatDate(tank.latest_tested_at)}
+                </Text>
+              </View>
+              {isDefault ? (
+                <View
+                  style={[
+                    styles.defaultPill,
+                    {
+                      backgroundColor: theme.colors.surfaceAccent,
+                      borderColor: theme.colors.borderAccent,
+                      borderRadius: theme.radius.pill,
+                      paddingHorizontal: theme.spacing.md,
+                      paddingVertical: 2,
+                    },
+                  ]}
+                  accessibilityLabel="Default tank"
+                  accessibilityRole="text">
+                  <Text style={[theme.typography.caption, { color: theme.colors.accent }]}>
+                    Default
+                  </Text>
                 </View>
-                <View style={styles.field}>
-                  <Text style={styles.label}>Notes</Text>
-                  <TextInput
-                    multiline
-                    style={[styles.input, styles.notesInput]}
-                    value={editNotes}
-                    onChangeText={setEditNotes}
-                    textAlignVertical="top"
-                  />
-                </View>
-                <View style={styles.actions}>
-                  <Pressable
-                    style={styles.primaryButton}
-                    onPress={() => saveTankEdits(tank.id)}
-                    disabled={isUpdating}>
-                    <Text style={styles.primaryButtonText}>
-                      {isUpdating ? 'Saving...' : 'Save Changes'}
-                    </Text>
-                  </Pressable>
-                  <Pressable style={styles.secondaryButton} onPress={cancelEditing}>
-                    <Text style={styles.secondaryButtonText}>Cancel</Text>
-                  </Pressable>
-                </View>
-              </>
-            ) : (
-              <>
-                <View style={styles.cardHeader}>
-                  <View style={styles.cardTitleBlock}>
-                    <Text style={styles.tankName}>{tank.name}</Text>
-                    <Text style={styles.mutedText}>
-                      {tank.test_count} {tank.test_count === 1 ? 'test' : 'tests'} • Last:{' '}
-                      {formatDate(tank.latest_tested_at)}
-                    </Text>
-                  </View>
-                  {isDefault ? (
-                    <View style={styles.defaultBadge}>
-                      <Text style={styles.defaultBadgeText}>Default</Text>
-                    </View>
-                  ) : null}
-                </View>
+              ) : null}
+            </View>
 
-                {tank.notes ? <Text style={styles.notes}>{tank.notes}</Text> : null}
+            {tank.notes ? (
+              <Text style={[theme.typography.bodyMd, { color: theme.colors.textMuted }]}>
+                {tank.notes}
+              </Text>
+            ) : null}
 
-                <View style={styles.actions}>
-                  <Pressable style={styles.secondaryButton} onPress={() => testTank(tank.id)}>
-                    <Text style={styles.secondaryButtonText}>Test</Text>
-                  </Pressable>
-                  <Pressable style={styles.secondaryButton} onPress={() => startEditing(tank)}>
-                    <Text style={styles.secondaryButtonText}>Edit</Text>
-                  </Pressable>
-                  <Pressable style={styles.secondaryButton} onPress={() => makeDefault(tank.id)}>
-                    <Text style={styles.secondaryButtonText}>Make Default</Text>
-                  </Pressable>
-                  <Pressable
-                    style={[styles.deleteButton, tank.test_count > 0 ? styles.disabledButton : null]}
-                    onPress={() => confirmDelete(tank)}
-                    disabled={tank.test_count > 0}>
-                    <Text style={styles.deleteButtonText}>Delete</Text>
-                  </Pressable>
-                </View>
-              </>
-            )}
-          </View>
+            <View style={[styles.actions, { gap: theme.spacing.sm }]}>
+              <Button
+                label="Test"
+                size="sm"
+                leftIcon="plus.circle.fill"
+                onPress={() => testTank(tank.id)}
+                accessibilityLabel={`Log test for ${tank.name}`}
+              />
+              <Button
+                label="Edit"
+                size="sm"
+                variant="secondary"
+                leftIcon="pencil"
+                onPress={() => startEditing(tank)}
+                accessibilityLabel={`Edit ${tank.name}`}
+              />
+              {isDefault ? null : (
+                <Button
+                  label="Make default"
+                  size="sm"
+                  variant="ghost"
+                  leftIcon="star"
+                  onPress={() => makeDefault(tank.id)}
+                  accessibilityLabel={`Make ${tank.name} the default tank`}
+                />
+              )}
+              <Button
+                label="Delete"
+                size="sm"
+                variant="danger"
+                leftIcon="trash.fill"
+                onPress={() => confirmDelete(tank)}
+                disabled={hasTests}
+                haptic="warning"
+                accessibilityLabel={`Delete ${tank.name}`}
+                accessibilityHint={
+                  hasTests
+                    ? 'Cannot delete a tank that has saved tests'
+                    : 'Permanently removes this tank'
+                }
+              />
+            </View>
+          </Card>
         );
       })}
-    </ScrollView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: AquariumTheme.screen,
-    flexGrow: 1,
-    gap: 14,
-    padding: 20,
-    paddingTop: 64,
-  },
-  title: {
-    color: AquariumTheme.primaryDark,
-    fontSize: 28,
-    fontWeight: '800',
-  },
-  subtitle: {
-    color: AquariumTheme.muted,
-    fontSize: 16,
-    lineHeight: 22,
-  },
-  panel: {
-    backgroundColor: AquariumTheme.surfaceBlue,
-    borderColor: AquariumTheme.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    elevation: 2,
-    gap: 12,
-    padding: 16,
-    shadowColor: AquariumTheme.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-  },
-  panelTitle: {
-    color: AquariumTheme.primaryDark,
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  field: {
-    gap: 6,
-  },
-  label: {
-    color: AquariumTheme.text,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  input: {
-    backgroundColor: AquariumTheme.surface,
-    borderColor: AquariumTheme.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    color: AquariumTheme.text,
-    fontSize: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-  },
-  notesInput: {
-    minHeight: 76,
-  },
-  card: {
-    backgroundColor: AquariumTheme.surface,
-    borderColor: AquariumTheme.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    elevation: 1,
-    gap: 12,
-    padding: 16,
-    shadowColor: AquariumTheme.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-  },
   cardHeader: {
     alignItems: 'flex-start',
     flexDirection: 'row',
     gap: 12,
     justifyContent: 'space-between',
   },
-  cardTitleBlock: {
-    flex: 1,
-    gap: 2,
-  },
-  tankName: {
-    color: AquariumTheme.text,
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  mutedText: {
-    color: AquariumTheme.muted,
-    fontSize: 14,
-    lineHeight: 21,
-  },
-  notes: {
-    color: AquariumTheme.muted,
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  defaultBadge: {
-    backgroundColor: AquariumTheme.surfaceMint,
-    borderColor: AquariumTheme.teal,
-    borderRadius: 8,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  defaultBadgeText: {
-    color: AquariumTheme.teal,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  actions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  primaryButton: {
-    alignItems: 'center',
-    backgroundColor: AquariumTheme.primary,
-    borderRadius: 8,
-    padding: 14,
-  },
-  primaryButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  secondaryButton: {
-    backgroundColor: AquariumTheme.surfaceBlue,
-    borderColor: AquariumTheme.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  secondaryButtonText: {
-    color: AquariumTheme.primary,
-    fontWeight: '700',
-  },
-  deleteButton: {
-    borderColor: '#fecaca',
-    borderRadius: 8,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  deleteButtonText: {
-    color: '#b42318',
-    fontWeight: '700',
-  },
-  disabledButton: {
-    opacity: 0.45,
-  },
-  errorText: {
-    color: AquariumTheme.danger,
-    fontSize: 15,
-  },
+  cardHeaderText: { flex: 1, gap: 2 },
+  defaultPill: { borderWidth: 1 },
+  actions: { flexDirection: 'row', flexWrap: 'wrap' },
+  flex1: { flex: 1 },
 });
