@@ -255,7 +255,7 @@ export default function TanksScreen() {
 
             <View style={[styles.actions, { gap: theme.spacing.sm }]}>
               <Button
-                label="+ Test"
+                label="Test"
                 size="sm"
                 leftIcon="plus.circle.fill"
                 onPress={() => testTank(tank.id)}

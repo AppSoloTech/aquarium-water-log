@@ -159,7 +159,7 @@ export default function HomeScreen() {
             Later: set target ranges and reminders
           </Text>
           <Button
-            label="+ Test"
+            label="Test"
             onPress={() => logTankTest(tanks[0].id)}
             leftIcon="plus.circle.fill"
             fullWidth
@@ -232,7 +232,7 @@ export default function HomeScreen() {
 
                   <View style={[styles.cardActions, { gap: theme.spacing.sm }]}>
                     <Button
-                      label="+ Test"
+                      label="Test"
                       onPress={() => logTankTest(tank.id)}
                       leftIcon="plus.circle.fill"
                       fullWidth
