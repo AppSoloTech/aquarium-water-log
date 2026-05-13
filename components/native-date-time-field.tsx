@@ -2,7 +2,8 @@ import DateTimePicker, { type DateTimePickerEvent } from '@react-native-communit
 import { useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { AquariumTheme } from '@/constants/aquarium-theme';
+import { Button } from '@/components/ui';
+import { useTheme } from '@/theme';
 
 type PickerMode = 'date' | 'time';
 
@@ -21,47 +22,89 @@ function formatDate(value: Date) {
 }
 
 function formatTime(value: Date) {
-  return value.toLocaleTimeString(undefined, {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
+  return value.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 }
 
 export function NativeDateTimeField({ value, onChange, onSetNow }: NativeDateTimeFieldProps) {
+  const theme = useTheme();
   const [activeMode, setActiveMode] = useState<PickerMode | null>(null);
 
   function updateValue(_event: DateTimePickerEvent, selectedDate?: Date) {
     if (Platform.OS !== 'ios') {
       setActiveMode(null);
     }
-
     if (selectedDate) {
       onChange(selectedDate);
     }
   }
 
   return (
-    <View style={styles.field}>
-      <View style={styles.labelRow}>
-        <Text style={styles.label}>Test date and time</Text>
-        <Pressable style={styles.smallButton} onPress={onSetNow}>
-          <Text style={styles.smallButtonText}>Now</Text>
-        </Pressable>
+    <View style={[styles.field, { gap: theme.spacing.sm }]}>
+      <View style={[styles.labelRow, { gap: theme.spacing.md }]}>
+        <Text style={[theme.typography.label, { color: theme.colors.text }]}>Test date and time</Text>
+        <Button
+          label="Now"
+          size="sm"
+          variant="ghost"
+          leftIcon="clock"
+          onPress={onSetNow}
+          accessibilityLabel="Set test time to now"
+        />
       </View>
 
-      <View style={styles.dateRow}>
-        <Pressable style={[styles.pickerButton, styles.dateButton]} onPress={() => setActiveMode('date')}>
-          <Text style={styles.pickerLabel}>Date</Text>
-          <Text style={styles.pickerValue}>{formatDate(value)}</Text>
+      <View style={[styles.dateRow, { gap: theme.spacing.sm }]}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Change test date, currently ${formatDate(value)}`}
+          onPress={() => setActiveMode('date')}
+          style={({ pressed }) => [
+            styles.pickerButton,
+            styles.dateButton,
+            {
+              backgroundColor: pressed ? theme.colors.surfaceMuted : theme.colors.surface,
+              borderColor: theme.colors.border,
+              borderRadius: theme.radius.md,
+              paddingHorizontal: theme.spacing.md,
+              paddingVertical: theme.spacing.md,
+            },
+          ]}>
+          <Text style={[theme.typography.caption, { color: theme.colors.textMuted }]}>Date</Text>
+          <Text style={[theme.typography.titleMd, { color: theme.colors.text }]}>{formatDate(value)}</Text>
         </Pressable>
-        <Pressable style={[styles.pickerButton, styles.timeButton]} onPress={() => setActiveMode('time')}>
-          <Text style={styles.pickerLabel}>Time</Text>
-          <Text style={styles.pickerValue}>{formatTime(value)}</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Change test time, currently ${formatTime(value)}`}
+          onPress={() => setActiveMode('time')}
+          style={({ pressed }) => [
+            styles.pickerButton,
+            styles.timeButton,
+            {
+              backgroundColor: pressed ? theme.colors.surfaceMuted : theme.colors.surface,
+              borderColor: theme.colors.border,
+              borderRadius: theme.radius.md,
+              paddingHorizontal: theme.spacing.md,
+              paddingVertical: theme.spacing.md,
+            },
+          ]}>
+          <Text style={[theme.typography.caption, { color: theme.colors.textMuted }]}>Time</Text>
+          <Text style={[theme.typography.titleMd, { color: theme.colors.text }]}>{formatTime(value)}</Text>
         </Pressable>
       </View>
 
       {activeMode ? (
-        <View style={Platform.OS === 'ios' ? styles.iosPickerPanel : null}>
+        <View
+          style={
+            Platform.OS === 'ios'
+              ? [
+                  styles.iosPickerPanel,
+                  {
+                    backgroundColor: theme.colors.surface,
+                    borderColor: theme.colors.border,
+                    borderRadius: theme.radius.md,
+                  },
+                ]
+              : null
+          }>
           <DateTimePicker
             value={value}
             mode={activeMode}
@@ -69,9 +112,9 @@ export function NativeDateTimeField({ value, onChange, onSetNow }: NativeDateTim
             onChange={updateValue}
           />
           {Platform.OS === 'ios' ? (
-            <Pressable style={styles.doneButton} onPress={() => setActiveMode(null)}>
-              <Text style={styles.doneButtonText}>Done</Text>
-            </Pressable>
+            <View style={{ padding: theme.spacing.md, borderTopColor: theme.colors.border, borderTopWidth: StyleSheet.hairlineWidth }}>
+              <Button label="Done" variant="ghost" onPress={() => setActiveMode(null)} fullWidth />
+            </View>
           ) : null}
         </View>
       ) : null}
@@ -80,79 +123,15 @@ export function NativeDateTimeField({ value, onChange, onSetNow }: NativeDateTim
 }
 
 const styles = StyleSheet.create({
-  field: {
-    gap: 8,
-  },
+  field: {},
   labelRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 12,
     justifyContent: 'space-between',
   },
-  label: {
-    color: AquariumTheme.text,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  dateRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  pickerButton: {
-    backgroundColor: AquariumTheme.surfaceBlue,
-    borderColor: AquariumTheme.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 3,
-    minHeight: 58,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  dateButton: {
-    flex: 1,
-  },
-  timeButton: {
-    width: 128,
-  },
-  pickerLabel: {
-    color: AquariumTheme.muted,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  pickerValue: {
-    color: AquariumTheme.text,
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  smallButton: {
-    backgroundColor: AquariumTheme.surfaceMint,
-    borderColor: AquariumTheme.borderMint,
-    borderRadius: 8,
-    borderWidth: 1,
-    paddingHorizontal: 11,
-    paddingVertical: 7,
-  },
-  smallButtonText: {
-    color: AquariumTheme.teal,
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  iosPickerPanel: {
-    backgroundColor: AquariumTheme.surface,
-    borderColor: AquariumTheme.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  doneButton: {
-    alignItems: 'center',
-    borderTopColor: AquariumTheme.borderSoft,
-    borderTopWidth: 1,
-    padding: 12,
-  },
-  doneButtonText: {
-    color: AquariumTheme.primary,
-    fontSize: 16,
-    fontWeight: '800',
-  },
+  dateRow: { flexDirection: 'row' },
+  pickerButton: { borderWidth: 1, gap: 2, minHeight: 58 },
+  dateButton: { flex: 1 },
+  timeButton: { width: 128 },
+  iosPickerPanel: { borderWidth: 1, overflow: 'hidden' },
 });
