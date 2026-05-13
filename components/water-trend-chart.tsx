@@ -263,7 +263,8 @@ export function WaterTrendChart({ analyteKey, points, range, onEditPoint }: Wate
                       theme.typography.caption,
                       styles.dotLabel,
                       { color: c.text },
-                    ]}>
+                    ]}
+                    numberOfLines={1}>
                     {formatValue(point.value)}
                   </Text>
                 </Pressable>
@@ -405,7 +406,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     position: 'absolute',
   },
-  dotLabel: { position: 'absolute', top: -20 },
+  dotLabel: { left: -18, position: 'absolute', textAlign: 'center', top: -20, width: 48 },
   dateLabel: { position: 'absolute' },
   lastDateLabel: { textAlign: 'right' },
   emptyChart: { alignItems: 'center', flex: 1, justifyContent: 'center' },

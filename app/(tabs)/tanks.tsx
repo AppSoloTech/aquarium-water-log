@@ -6,9 +6,7 @@ import { Button, Card, Screen, Section, TextField } from '@/components/ui';
 import {
   createTank,
   deleteTank,
-  getDefaultTankId,
   getTankSummaries,
-  setDefaultTankId,
   type TankSummary,
   updateTank,
 } from '@/lib/database';
@@ -22,7 +20,7 @@ export default function TanksScreen() {
   const router = useRouter();
   const theme = useTheme();
   const [tanks, setTanks] = useState<TankSummary[]>([]);
-  const [defaultTankId, setDefaultTankIdState] = useState<number | null>(null);
+  const [showAddTankForm, setShowAddTankForm] = useState(false);
   const [tankName, setTankName] = useState('');
   const [notes, setNotes] = useState('');
   const [editingTankId, setEditingTankId] = useState<number | null>(null);
@@ -35,9 +33,11 @@ export default function TanksScreen() {
   const loadTanks = useCallback(async () => {
     try {
       setErrorMessage('');
-      const [summaries, defaultId] = await Promise.all([getTankSummaries(), getDefaultTankId()]);
+      const summaries = await getTankSummaries();
       setTanks(summaries);
-      setDefaultTankIdState(defaultId);
+      if (summaries.length === 0) {
+        setShowAddTankForm(true);
+      }
     } catch (error) {
       console.error(error);
       setErrorMessage('Could not load tanks.');
@@ -51,6 +51,10 @@ export default function TanksScreen() {
   );
 
   async function addTank() {
+    if (isSaving) {
+      return;
+    }
+
     if (!tankName.trim()) {
       Alert.alert('Tank name required', 'Give this tank a name before saving.');
       return;
@@ -58,10 +62,10 @@ export default function TanksScreen() {
 
     try {
       setIsSaving(true);
-      const newTankId = await createTank(tankName, notes);
+      await createTank(tankName, notes);
       setTankName('');
       setNotes('');
-      await setDefaultTankId(newTankId);
+      setShowAddTankForm(false);
       await loadTanks();
     } catch (error) {
       console.error(error);
@@ -74,19 +78,12 @@ export default function TanksScreen() {
     }
   }
 
-  async function makeDefault(id: number) {
-    try {
-      await setDefaultTankId(id);
-      setDefaultTankIdState(id);
-    } catch (error) {
-      console.error(error);
-      Alert.alert('Default not saved', 'Could not update the default tank.');
-    }
+  function testTank(id: number) {
+    router.push({ pathname: '/add-test', params: { tankId: String(id) } } as never);
   }
 
-  async function testTank(id: number) {
-    await makeDefault(id);
-    router.push('/add-test' as never);
+  function viewHistory(id: number) {
+    router.push({ pathname: '/history', params: { tankId: String(id) } } as never);
   }
 
   function startEditing(tank: TankSummary) {
@@ -150,33 +147,45 @@ export default function TanksScreen() {
       <Section
         title="Tanks"
         subtitle="Create tanks first, then scope each water test to one tank."
+        trailing={
+          <Button
+            label={showAddTankForm ? 'Close' : 'Add Tank'}
+            size="sm"
+            variant={showAddTankForm ? 'ghost' : 'secondary'}
+            leftIcon={showAddTankForm ? 'xmark' : 'plus'}
+            onPress={() => setShowAddTankForm((current) => !current)}
+            accessibilityHint={showAddTankForm ? 'Hides the add tank form' : 'Shows the add tank form'}
+          />
+        }
       />
 
-      <Card variant="standard" padding="md" elevation="sm">
-        <Text style={[theme.typography.titleMd, { color: theme.colors.text }]}>Add Tank</Text>
-        <TextField
-          label="Tank name"
-          value={tankName}
-          onChangeText={setTankName}
-          placeholder="Example: Living Room 20g"
-          autoCapitalize="words"
-          returnKeyType="next"
-        />
-        <TextField
-          label="Notes"
-          value={notes}
-          onChangeText={setNotes}
-          placeholder="Optional tank details"
-          multiline
-        />
-        <Button
-          label={isSaving ? 'Saving...' : 'Add Tank'}
-          onPress={addTank}
-          loading={isSaving}
-          leftIcon="plus"
-          fullWidth
-        />
-      </Card>
+      {showAddTankForm ? (
+        <Card variant="standard" padding="md" elevation="sm">
+          <Text style={[theme.typography.titleMd, { color: theme.colors.text }]}>Add Tank</Text>
+          <TextField
+            label="Tank name"
+            value={tankName}
+            onChangeText={setTankName}
+            placeholder="Example: Living Room 20g"
+            autoCapitalize="words"
+            returnKeyType="next"
+          />
+          <TextField
+            label="Notes"
+            value={notes}
+            onChangeText={setNotes}
+            placeholder="Optional tank details"
+            multiline
+          />
+          <Button
+            label={isSaving ? 'Saving...' : 'Add Tank'}
+            onPress={addTank}
+            loading={isSaving}
+            leftIcon="plus"
+            fullWidth
+          />
+        </Card>
+      ) : null}
 
       {errorMessage ? (
         <Card variant="warning" padding="md" elevation="none">
@@ -185,7 +194,6 @@ export default function TanksScreen() {
       ) : null}
 
       {tanks.map((tank) => {
-        const isDefault = tank.id === defaultTankId;
         const isEditing = tank.id === editingTankId;
         const hasTests = tank.test_count > 0;
 
@@ -237,25 +245,6 @@ export default function TanksScreen() {
                   {formatDate(tank.latest_tested_at)}
                 </Text>
               </View>
-              {isDefault ? (
-                <View
-                  style={[
-                    styles.defaultPill,
-                    {
-                      backgroundColor: theme.colors.surfaceAccent,
-                      borderColor: theme.colors.borderAccent,
-                      borderRadius: theme.radius.pill,
-                      paddingHorizontal: theme.spacing.md,
-                      paddingVertical: 2,
-                    },
-                  ]}
-                  accessibilityLabel="Default tank"
-                  accessibilityRole="text">
-                  <Text style={[theme.typography.caption, { color: theme.colors.accent }]}>
-                    Default
-                  </Text>
-                </View>
-              ) : null}
             </View>
 
             {tank.notes ? (
@@ -266,11 +255,19 @@ export default function TanksScreen() {
 
             <View style={[styles.actions, { gap: theme.spacing.sm }]}>
               <Button
-                label="Test"
+                label="+ Test"
                 size="sm"
                 leftIcon="plus.circle.fill"
                 onPress={() => testTank(tank.id)}
                 accessibilityLabel={`Log test for ${tank.name}`}
+              />
+              <Button
+                label="History"
+                size="sm"
+                variant="secondary"
+                leftIcon="list.bullet"
+                onPress={() => viewHistory(tank.id)}
+                accessibilityLabel={`View history for ${tank.name}`}
               />
               <Button
                 label="Edit"
@@ -280,16 +277,6 @@ export default function TanksScreen() {
                 onPress={() => startEditing(tank)}
                 accessibilityLabel={`Edit ${tank.name}`}
               />
-              {isDefault ? null : (
-                <Button
-                  label="Make default"
-                  size="sm"
-                  variant="ghost"
-                  leftIcon="star"
-                  onPress={() => makeDefault(tank.id)}
-                  accessibilityLabel={`Make ${tank.name} the default tank`}
-                />
-              )}
               <Button
                 label="Delete"
                 size="sm"
@@ -321,7 +308,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   cardHeaderText: { flex: 1, gap: 2 },
-  defaultPill: { borderWidth: 1 },
   actions: { flexDirection: 'row', flexWrap: 'wrap' },
   flex1: { flex: 1 },
 });

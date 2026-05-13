@@ -1,5 +1,5 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 
 import { ReadingValueGrid, StatusInsight, TrendStrip } from '@/components/reading-summary';
@@ -19,7 +19,6 @@ import {
   getAllWaterTests,
   getAnalyteRanges,
   getTanks,
-  setDefaultTankId,
   type AnalyteKey,
   type AnalyteRange,
   type Tank,
@@ -40,6 +39,7 @@ export default function HistoryScreen() {
   const theme = useTheme();
   const params = useLocalSearchParams<{ tankId?: string }>();
   const routeTankId = Number(params.tankId);
+  const appliedRouteTankIdRef = useRef<number | null>(null);
   const [tanks, setTanks] = useState<Tank[]>([]);
   const [selectedTankId, setSelectedTankId] = useState<number | null>(
     Number.isFinite(routeTankId) && routeTankId > 0 ? routeTankId : null,
@@ -53,6 +53,7 @@ export default function HistoryScreen() {
 
   const loadTests = useCallback(async () => {
     try {
+      setIsLoading(true);
       setErrorMessage('');
       const [savedTanks, savedTests] = await Promise.all([
         getTanks(),
@@ -79,15 +80,19 @@ export default function HistoryScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      loadTests();
-    }, [loadTests]),
-  );
+      const hasRouteTank = Number.isFinite(routeTankId) && routeTankId > 0;
 
-  useEffect(() => {
-    if (Number.isFinite(routeTankId) && routeTankId > 0) {
-      setSelectedTankId(routeTankId);
-    }
-  }, [routeTankId]);
+      if (hasRouteTank && appliedRouteTankIdRef.current !== routeTankId) {
+        appliedRouteTankIdRef.current = routeTankId;
+        if (selectedTankId !== routeTankId) {
+          setSelectedTankId(routeTankId);
+          return;
+        }
+      }
+
+      loadTests();
+    }, [loadTests, routeTankId, selectedTankId]),
+  );
 
   function confirmDelete(test: WaterTest) {
     Alert.alert('Delete test?', `Delete the ${formatDate(test.tested_at)} test for ${test.tank_name}?`, [
@@ -121,10 +126,11 @@ export default function HistoryScreen() {
   }
 
   async function addTestFromHistory() {
-    if (selectedTankId) {
-      await setDefaultTankId(selectedTankId);
-    }
-    router.push('/add-test' as never);
+    router.push(
+      selectedTankId
+        ? ({ pathname: '/add-test', params: { tankId: String(selectedTankId) } } as never)
+        : ('/add-test' as never),
+    );
   }
 
   const trendTankIds = Array.from(

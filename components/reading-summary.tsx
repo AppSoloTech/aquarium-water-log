@@ -100,7 +100,8 @@ export function ReadingValueGrid({
               style={[
                 theme.typography.titleMd,
                 { color: tone, marginTop: 2, fontVariant: ['tabular-nums'] },
-              ]}>
+              ]}
+              numberOfLines={1}>
               {formatValue(getValue(test, key))}
             </Text>
           </View>

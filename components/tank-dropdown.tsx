@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { IconSymbol } from '@/components/ui';
 import type { Tank } from '@/lib/database';
@@ -25,6 +26,7 @@ export function TankDropdown({
   emptyLabel = 'Choose a tank',
 }: TankDropdownProps) {
   const theme = useTheme();
+  const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
   const selectedTank = tanks.find((tank) => tank.id === selectedTankId);
   const selectedLabel = selectedTankId === null && includeAllOption ? allOptionLabel : selectedTank?.name;
@@ -68,7 +70,13 @@ export function TankDropdown({
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
         <Pressable
           accessibilityLabel="Close picker"
-          style={[styles.backdrop, { backgroundColor: theme.colors.overlay }]}
+          style={[
+            styles.backdrop,
+            {
+              backgroundColor: theme.colors.overlay,
+              paddingTop: insets.top + theme.spacing.lg,
+            },
+          ]}
           onPress={() => setOpen(false)}>
           <Pressable
             accessibilityLabel={`${label} options`}
@@ -76,8 +84,8 @@ export function TankDropdown({
               styles.sheet,
               {
                 backgroundColor: theme.colors.surface,
-                borderTopLeftRadius: theme.radius.xl,
-                borderTopRightRadius: theme.radius.xl,
+                borderBottomLeftRadius: theme.radius.xl,
+                borderBottomRightRadius: theme.radius.xl,
                 paddingTop: theme.spacing.lg,
                 paddingHorizontal: theme.spacing.lg,
                 paddingBottom: theme.spacing.xl,
@@ -168,7 +176,7 @@ const styles = StyleSheet.create({
   buttonText: { flex: 1 },
   backdrop: {
     flex: 1,
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
   },
   sheet: {
     maxHeight: '70%',

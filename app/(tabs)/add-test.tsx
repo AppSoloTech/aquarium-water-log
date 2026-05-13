@@ -1,14 +1,12 @@
-import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import { Alert } from 'react-native';
 
 import { EmptyState, Screen, Section } from '@/components/ui';
 import { WaterTestForm, type WaterTestFormState } from '@/components/water-test-form';
 import {
-  getDefaultTankId,
   getTanks,
   insertWaterTest,
-  setDefaultTankId,
   type NewWaterTest,
   type Tank,
 } from '@/lib/database';
@@ -28,21 +26,40 @@ function initialState(): WaterTestFormState {
   };
 }
 
+function hasDraftContent(state: WaterTestFormState) {
+  return (
+    state.notes.trim().length > 0 ||
+    state.didWaterChange ||
+    Object.values(state.numbers).some((value) => value.trim().length > 0)
+  );
+}
+
 export default function AddTestScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ tankId?: string }>();
+  const routeTankId = useMemo(() => {
+    const parsed = Number(params.tankId);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }, [params.tankId]);
   const [tanks, setTanks] = useState<Tank[]>([]);
   const [state, setState] = useState<WaterTestFormState>(initialState);
   const [isSaving, setIsSaving] = useState(false);
 
   const loadTanks = useCallback(async () => {
-    const [savedTanks, defaultTankId] = await Promise.all([getTanks(), getDefaultTankId()]);
+    const savedTanks = await getTanks();
+    const routeTankExists = routeTankId
+      ? savedTanks.some((tank) => tank.id === routeTankId)
+      : false;
     setTanks(savedTanks);
     setState((current) => ({
       ...current,
-      testedAt: new Date(),
-      selectedTankId: current.selectedTankId ?? defaultTankId ?? savedTanks[0]?.id ?? null,
+      selectedTankId: routeTankExists
+        ? routeTankId
+        : hasDraftContent(current)
+          ? current.selectedTankId
+          : null,
     }));
-  }, []);
+  }, [routeTankId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -54,7 +71,18 @@ export default function AddTestScreen() {
     setState((current) => ({ ...current, ...next }));
   }
 
+  function discardDraft() {
+    setState({
+      ...initialState(),
+      selectedTankId: routeTankId && tanks.some((tank) => tank.id === routeTankId) ? routeTankId : null,
+    });
+  }
+
   async function saveTest() {
+    if (isSaving) {
+      return;
+    }
+
     if (!state.selectedTankId) {
       Alert.alert('Choose a tank', 'Create or select a tank before saving this test.');
       return;
@@ -82,7 +110,6 @@ export default function AddTestScreen() {
 
     try {
       setIsSaving(true);
-      await setDefaultTankId(state.selectedTankId);
       await insertWaterTest(test);
       setState(initialState);
       router.push('/history' as never);
@@ -117,6 +144,7 @@ export default function AddTestScreen() {
         state={state}
         onChange={update}
         onSubmit={saveTest}
+        onDiscard={discardDraft}
         submitLabel="Save Test"
         isSaving={isSaving}
       />

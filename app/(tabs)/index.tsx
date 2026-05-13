@@ -17,7 +17,6 @@ import {
   getLatestWaterTestsByTank,
   getTankSummaries,
   initDatabase,
-  setDefaultTankId,
   type AnalyteRange,
   type TankSummary,
   type WaterTest,
@@ -93,9 +92,8 @@ export default function HomeScreen() {
   }, {});
   const totalTests = tanks.reduce((sum, tank) => sum + tank.test_count, 0);
 
-  async function logTankTest(tankId: number) {
-    await setDefaultTankId(tankId);
-    router.push('/add-test' as never);
+  function logTankTest(tankId: number) {
+    router.push({ pathname: '/add-test', params: { tankId: String(tankId) } } as never);
   }
 
   return (
@@ -161,7 +159,7 @@ export default function HomeScreen() {
             Later: set target ranges and reminders
           </Text>
           <Button
-            label="Log First Test"
+            label="+ Test"
             onPress={() => logTankTest(tanks[0].id)}
             leftIcon="plus.circle.fill"
             fullWidth
@@ -234,7 +232,7 @@ export default function HomeScreen() {
 
                   <View style={[styles.cardActions, { gap: theme.spacing.sm }]}>
                     <Button
-                      label="Log Test"
+                      label="+ Test"
                       onPress={() => logTankTest(tank.id)}
                       leftIcon="plus.circle.fill"
                       fullWidth

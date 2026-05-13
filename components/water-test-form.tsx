@@ -22,6 +22,7 @@ type WaterTestFormProps = {
   onChange: (next: Partial<WaterTestFormState>) => void;
   onSubmit: () => void;
   onCancel?: () => void;
+  onDiscard?: () => void;
   submitLabel: string;
   isSaving?: boolean;
 };
@@ -38,6 +39,7 @@ export function WaterTestForm({
   onChange,
   onSubmit,
   onCancel,
+  onDiscard,
   submitLabel,
   isSaving = false,
 }: WaterTestFormProps) {
@@ -125,6 +127,16 @@ export function WaterTestForm({
           <Button label="Cancel" variant="ghost" onPress={onCancel} fullWidth style={styles.flex1} haptic="none" />
         ) : null}
       </View>
+      {onDiscard ? (
+        <Button
+          label="Discard Draft"
+          variant="ghost"
+          onPress={onDiscard}
+          fullWidth
+          haptic="warning"
+          accessibilityHint="Clears the unsaved test values"
+        />
+      ) : null}
     </View>
   );
 }

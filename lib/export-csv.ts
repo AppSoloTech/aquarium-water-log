@@ -32,6 +32,30 @@ function csvCell(value: string | number | null) {
   return text;
 }
 
+function slugPart(value: string) {
+  return value
+    .trim()
+    .replace(/[^a-z0-9]+/gi, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48);
+}
+
+function humanDateTime(value: Date) {
+  const pad = (part: number) => String(part).padStart(2, '0');
+  return [
+    value.getFullYear(),
+    pad(value.getMonth() + 1),
+    pad(value.getDate()),
+    `${pad(value.getHours())}${pad(value.getMinutes())}`,
+  ].join('-');
+}
+
+function exportFileName(tests: WaterTest[]) {
+  const tankNames = Array.from(new Set(tests.map((test) => test.tank_name).filter(Boolean)));
+  const tankPart = tankNames.length === 1 ? slugPart(tankNames[0]) : 'All-Tanks';
+  return `aquarium-water-log-${tankPart || 'Tank'}-${humanDateTime(new Date())}.csv`;
+}
+
 export function waterTestsToCsv(tests: WaterTest[]) {
   const rows = tests.map((test) =>
     [
@@ -62,7 +86,7 @@ export async function shareWaterTestsCsv(tests: WaterTest[]) {
     throw new Error('Sharing is not available on this device.');
   }
 
-  const file = new File(Paths.cache, `aquarium-water-log-${Date.now()}.csv`);
+  const file = new File(Paths.cache, exportFileName(tests));
   file.create({ overwrite: true });
   file.write(waterTestsToCsv(tests));
 

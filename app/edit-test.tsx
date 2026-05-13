@@ -7,7 +7,6 @@ import { WaterTestForm, type WaterTestFormState } from '@/components/water-test-
 import {
   getTanks,
   getWaterTest,
-  setDefaultTankId,
   type NewWaterTest,
   type Tank,
   updateWaterTest,
@@ -84,6 +83,10 @@ export default function EditTestScreen() {
   }
 
   async function saveTest() {
+    if (isSaving) {
+      return;
+    }
+
     if (!state.selectedTankId) {
       Alert.alert('Choose a tank', 'Select a tank before saving this test.');
       return;
@@ -111,7 +114,6 @@ export default function EditTestScreen() {
 
     try {
       setIsSaving(true);
-      await setDefaultTankId(state.selectedTankId);
       await updateWaterTest(testId, test);
       router.back();
     } catch (error) {

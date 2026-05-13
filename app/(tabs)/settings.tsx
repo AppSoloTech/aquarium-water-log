@@ -214,6 +214,7 @@ export default function SettingsScreen() {
   const [isExportingBackup, setIsExportingBackup] = useState(false);
   const [isImportingBackup, setIsImportingBackup] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+  const [rangeSaveMessage, setRangeSaveMessage] = useState('');
 
   const loadSettings = useCallback(async () => {
     try {
@@ -264,6 +265,7 @@ export default function SettingsScreen() {
     async function loadRanges() {
       if (!rangeTankId) {
         setRangeInputs(defaultRangeInputs());
+        setRangeSaveMessage('');
         return;
       }
 
@@ -278,6 +280,7 @@ export default function SettingsScreen() {
           return result;
         }, {} as RangeInputState),
       );
+      setRangeSaveMessage('');
     }
 
     loadRanges().catch((error) => {
@@ -287,6 +290,7 @@ export default function SettingsScreen() {
   }, [rangeTankId]);
 
   function updateRange(key: AnalyteKey, side: 'low' | 'high', value: string) {
+    setRangeSaveMessage('');
     setRangeInputs((current) => ({
       ...current,
       [key]: { ...current[key], [side]: value },
@@ -365,6 +369,10 @@ export default function SettingsScreen() {
   }
 
   async function saveRanges() {
+    if (isSavingRanges) {
+      return;
+    }
+
     if (!rangeTankId) {
       Alert.alert('Choose a tank', 'Select which tank these ranges belong to.');
       return;
@@ -405,7 +413,10 @@ export default function SettingsScreen() {
     try {
       setIsSavingRanges(true);
       await Promise.all(parsedRanges.map((range) => saveAnalyteRange(rangeTankId, range)));
-      setToastMessage('Target ranges saved.');
+      const tankName = tanks.find((tank) => tank.id === rangeTankId)?.name ?? 'this tank';
+      const message = `Target ranges saved for ${tankName}.`;
+      setRangeSaveMessage(message);
+      setToastMessage(message);
     } catch (error) {
       console.error(error);
       Alert.alert('Ranges not saved', 'Could not save these target ranges.');
@@ -762,6 +773,13 @@ export default function SettingsScreen() {
             leftIcon="checkmark.circle.fill"
             fullWidth
           />
+          {rangeSaveMessage ? (
+            <Card variant="muted" padding="md" elevation="none">
+              <Text style={[theme.typography.bodyMd, { color: theme.colors.success }]}>
+                {rangeSaveMessage}
+              </Text>
+            </Card>
+          ) : null}
         </Card>
       </>
     );

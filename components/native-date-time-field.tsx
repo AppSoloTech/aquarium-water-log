@@ -34,7 +34,24 @@ export function NativeDateTimeField({ value, onChange, onSetNow }: NativeDateTim
       setActiveMode(null);
     }
     if (selectedDate) {
-      onChange(selectedDate);
+      const nextValue = new Date(value);
+
+      if (activeMode === 'date') {
+        nextValue.setFullYear(
+          selectedDate.getFullYear(),
+          selectedDate.getMonth(),
+          selectedDate.getDate(),
+        );
+      } else {
+        nextValue.setHours(
+          selectedDate.getHours(),
+          selectedDate.getMinutes(),
+          selectedDate.getSeconds(),
+          selectedDate.getMilliseconds(),
+        );
+      }
+
+      onChange(nextValue);
     }
   }
 
@@ -127,11 +144,12 @@ const styles = StyleSheet.create({
   labelRow: {
     alignItems: 'center',
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
   },
-  dateRow: { flexDirection: 'row' },
+  dateRow: { flexDirection: 'row', flexWrap: 'wrap' },
   pickerButton: { borderWidth: 1, gap: 2, minHeight: 58 },
-  dateButton: { flex: 1 },
-  timeButton: { width: 128 },
+  dateButton: { flex: 1, minWidth: 170 },
+  timeButton: { flexGrow: 1, minWidth: 128 },
   iosPickerPanel: { borderWidth: 1, overflow: 'hidden' },
 });
