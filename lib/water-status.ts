@@ -219,14 +219,3 @@ export function getOverallStatus(test: WaterTest | null, ranges: AnalyteRange[] 
   );
 }
 
-export function getStatusColor(status: ReadingStatus) {
-  if (status === 'Danger') {
-    return '#b42318';
-  }
-
-  if (status === 'Caution') {
-    return '#b54708';
-  }
-
-  return '#047857';
-}
