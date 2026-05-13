@@ -5,7 +5,7 @@ Use this checklist on a physical Android phone before a closed testing build.
 ## Fresh Install
 
 - Install a fresh preview build.
-- Open the app and confirm it creates the default local database.
+- Open the app and confirm it creates the local database.
 - Confirm Home, Tanks, Add Test, History, and Settings all open without errors.
 - Confirm the app works without signing in and does not ask for account setup.
 
@@ -13,7 +13,8 @@ Use this checklist on a physical Android phone before a closed testing build.
 
 - Create a new tank with notes.
 - Rename the tank and confirm the new name appears on Home, History, and reminders.
-- Mark a tank as default.
+- Confirm Add Test opened from the tab starts with no tank selected.
+- Confirm Add Test opened from a tank action preselects that tank.
 - Confirm a tank with saved tests cannot be deleted.
 - Confirm a tank without tests or notifications can be deleted.
 
@@ -63,7 +64,7 @@ Use this checklist on a physical Android phone before a closed testing build.
 - Import an exported CSV and confirm matching rows are skipped.
 - Import a CSV with a new tank name and confirm the tank is created.
 - Delete all tests for one tank from Local Data.
-- Reset all local data and confirm a new default tank is created.
+- Reset all local data and confirm the app returns to a ready-to-use fresh state with a starter tank.
 
 ## Store Build
 

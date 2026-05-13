@@ -54,7 +54,7 @@ Capture screenshots from the preview or production Android build, not the web ap
 - Add Test form showing native date/time picker controls and quick value chips
 - History screen filtered to one tank with the Trends chart visible
 - History chart after tapping a point, showing date/value/water-change details and Edit Test
-- Tanks screen showing multiple tanks and the default tank
+- Tanks screen showing multiple tanks, per-tank Test and History actions, and the collapsed Add Tank form
 - Settings screen showing notification, target range, backup/import, and help tiles
 - Settings > Target Ranges showing tank-specific low/high values
 - Settings > Backup & Import showing export/import controls

@@ -462,7 +462,7 @@ export default function SettingsScreen() {
   function confirmResetLocalData() {
     Alert.alert(
       'Reset all local data?',
-      'This deletes all tanks, tests, target ranges, notifications, and settings on this device. A new default tank will be created so the app is ready to use again.',
+      'This deletes all tanks, tests, target ranges, notifications, and settings on this device. A starter tank will be created so the app is ready to use again.',
       [
         { text: 'Cancel', style: 'cancel' },
         {

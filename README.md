@@ -9,7 +9,7 @@ A local-first Expo React Native app for logging freshwater aquarium water tests.
 - Edit tank names/notes and correct saved water tests.
 - View the latest reading on the dashboard.
 - Browse all history or filter history by tank with dropdown selection.
-- Save a default tank for faster logging.
+- Start Add Test blank from the tab, or preselect the tank when logging from a tank action.
 - Create and manage local hourly or daily notifications for specific tanks.
 - Configure tank-specific low/high target ranges for NO3, NO2, pH, KH, and GH.
 - Delete saved tests for one tank or reset all local app data from Settings.
@@ -39,7 +39,7 @@ npm run android
 ## Manual Test Checklist
 
 - Fresh install creates the local SQLite tables.
-- Tanks can be created, marked as default, and selected while logging tests.
+- Tanks can be created, edited, selected while logging tests, and opened directly in History.
 - Tanks can be edited after creation.
 - Add Test saves a valid record and rejects non-numeric water values.
 - History can open an existing test for correction.
