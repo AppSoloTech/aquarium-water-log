@@ -70,4 +70,5 @@ Thumbs.db
 # Local scaffolding and scratch files
 app-example/
 /prompts/
+notes/
 app-test-notes*
