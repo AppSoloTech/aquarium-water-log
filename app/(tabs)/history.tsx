@@ -1,12 +1,19 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 
 import { ReadingValueGrid, StatusInsight, TrendStrip } from '@/components/reading-summary';
-import { StatusBadge } from '@/components/status-badge';
 import { TankDropdown } from '@/components/tank-dropdown';
+import {
+  Button,
+  Card,
+  Chip,
+  EmptyState,
+  Screen,
+  Section,
+  StatusPill,
+} from '@/components/ui';
 import { WaterTrendChart, type TrendPoint } from '@/components/water-trend-chart';
-import { AquariumTheme } from '@/constants/aquarium-theme';
 import {
   deleteWaterTest,
   getAllWaterTests,
@@ -20,6 +27,7 @@ import {
 } from '@/lib/database';
 import { shareWaterTestsCsv } from '@/lib/export-csv';
 import { ANALYTE_LABELS, getOverallStatus } from '@/lib/water-status';
+import { useTheme } from '@/theme';
 
 function formatDate(value: string) {
   return new Date(value).toLocaleString();
@@ -29,6 +37,7 @@ const chartAnalytes: AnalyteKey[] = ['nitrate_no3', 'nitrite_no2', 'ph', 'kh', '
 
 export default function HistoryScreen() {
   const router = useRouter();
+  const theme = useTheme();
   const params = useLocalSearchParams<{ tankId?: string }>();
   const routeTankId = Number(params.tankId);
   const [tanks, setTanks] = useState<Tank[]>([]);
@@ -51,7 +60,7 @@ export default function HistoryScreen() {
       ]);
 
       const uniqueTankIds = Array.from(
-        new Set(savedTests.map((test) => test.tank_id).filter((id): id is number => id !== null)),
+        new Set(savedTests.map((t) => t.tank_id).filter((id): id is number => id !== null)),
       );
       const rangeEntries = await Promise.all(
         uniqueTankIds.map(async (tankId) => [tankId, await getAnalyteRanges(tankId)] as const),
@@ -115,12 +124,11 @@ export default function HistoryScreen() {
     if (selectedTankId) {
       await setDefaultTankId(selectedTankId);
     }
-
     router.push('/add-test' as never);
   }
 
   const trendTankIds = Array.from(
-    new Set(tests.map((test) => test.tank_id).filter((id): id is number => id !== null)),
+    new Set(tests.map((t) => t.tank_id).filter((id): id is number => id !== null)),
   );
   const chartTankId = selectedTankId ?? (trendTankIds.length === 1 ? trendTankIds[0] : null);
   const chartTank = tanks.find((tank) => tank.id === chartTankId) ?? null;
@@ -141,16 +149,22 @@ export default function HistoryScreen() {
   );
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.headerRow}>
-        <Text style={styles.title}>History</Text>
-        <Pressable
-          style={[styles.exportButton, tests.length === 0 ? styles.disabledButton : null]}
-          onPress={exportCsv}
-          disabled={tests.length === 0 || exporting}>
-          <Text style={styles.exportButtonText}>{exporting ? 'Exporting...' : 'Export CSV'}</Text>
-        </Pressable>
-      </View>
+    <Screen>
+      <Section
+        title="History"
+        trailing={
+          <Button
+            label={exporting ? 'Exporting...' : 'Export CSV'}
+            size="sm"
+            variant="secondary"
+            leftIcon="square.and.arrow.up.fill"
+            onPress={exportCsv}
+            loading={exporting}
+            disabled={tests.length === 0}
+            accessibilityHint="Shares all currently visible tests as a CSV file"
+          />
+        }
+      />
 
       <TankDropdown
         label="History scope"
@@ -161,35 +175,26 @@ export default function HistoryScreen() {
       />
 
       {!isLoading && !errorMessage && tests.length > 0 ? (
-        <View style={styles.trendsPanel}>
-          <View style={styles.trendsHeader}>
-            <View>
-              <Text style={styles.trendsTitle}>Trends</Text>
-              <Text style={styles.trendsSubtitle}>
+        <Card variant="accent" padding="md" elevation="sm">
+          <View style={[styles.cardHeader, { gap: theme.spacing.md }]}>
+            <View style={styles.flexShrink}>
+              <Text style={[theme.typography.titleMd, { color: theme.colors.text }]}>Trends</Text>
+              <Text style={[theme.typography.bodySm, { color: theme.colors.textMuted }]}>
                 {chartTank ? chartTank.name : 'Select one tank to chart readings'}
               </Text>
             </View>
           </View>
 
-          <View style={styles.analyteRow}>
-            {chartAnalytes.map((analyte) => {
-              const selected = analyte === selectedAnalyte;
-
-              return (
-                <Pressable
-                  key={analyte}
-                  style={[styles.analyteButton, selected ? styles.selectedAnalyteButton : null]}
-                  onPress={() => setSelectedAnalyte(analyte)}>
-                  <Text
-                    style={[
-                      styles.analyteButtonText,
-                      selected ? styles.selectedAnalyteButtonText : null,
-                    ]}>
-                    {ANALYTE_LABELS[analyte]}
-                  </Text>
-                </Pressable>
-              );
-            })}
+          <View style={[styles.analyteRow, { gap: theme.spacing.sm }]}>
+            {chartAnalytes.map((analyte) => (
+              <Chip
+                key={analyte}
+                label={ANALYTE_LABELS[analyte]}
+                selected={analyte === selectedAnalyte}
+                onPress={() => setSelectedAnalyte(analyte)}
+                size="sm"
+              />
+            ))}
           </View>
 
           {chartTankId ? (
@@ -202,30 +207,39 @@ export default function HistoryScreen() {
               }
             />
           ) : (
-            <View style={styles.chartPrompt}>
-              <Text style={styles.mutedText}>
+            <Card variant="muted" padding="md" elevation="none">
+              <Text style={[theme.typography.bodyMd, { color: theme.colors.textMuted }]}>
                 Trends are easiest to read one tank at a time. Choose a tank from History scope.
               </Text>
-            </View>
+            </Card>
           )}
-        </View>
+        </Card>
       ) : null}
 
-      {isLoading ? <Text style={styles.mutedText}>Loading tests...</Text> : null}
-      {!isLoading && errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+      {isLoading ? (
+        <Text style={[theme.typography.bodyMd, { color: theme.colors.textMuted }]}>
+          Loading tests...
+        </Text>
+      ) : null}
+
+      {!isLoading && errorMessage ? (
+        <Card variant="warning" padding="md" elevation="none">
+          <Text style={[theme.typography.bodyMd, { color: theme.colors.danger }]}>{errorMessage}</Text>
+        </Card>
+      ) : null}
 
       {!isLoading && !errorMessage && tests.length === 0 ? (
-        <View style={styles.emptyPanel}>
-          <Text style={styles.emptyTitle}>No tests saved yet</Text>
-          <Text style={styles.mutedText}>
-            {selectedTankId
+        <EmptyState
+          icon="list.bullet"
+          tone="info"
+          title="No tests saved yet"
+          description={
+            selectedTankId
               ? 'This tank does not have any readings yet.'
-              : 'Your saved readings will appear here newest first.'}
-          </Text>
-          <Pressable style={styles.primaryButton} onPress={addTestFromHistory}>
-            <Text style={styles.primaryButtonText}>Add First Test</Text>
-          </Pressable>
-        </View>
+              : 'Your saved readings will appear here newest first.'
+          }
+          action={{ label: 'Add First Test', onPress: addTestFromHistory }}
+        />
       ) : null}
 
       {tests.map((test, index) => {
@@ -239,229 +253,73 @@ export default function HistoryScreen() {
               ) ?? null;
 
         return (
-          <View key={test.id} style={styles.card}>
-            <View style={styles.cardHeader}>
-              <View style={styles.cardTitleBlock}>
-                <Text style={styles.tankName}>{test.tank_name || 'Unnamed tank'}</Text>
-                <Text style={styles.mutedText}>{formatDate(test.tested_at)}</Text>
+          <Card key={test.id} variant="standard" padding="md" elevation="sm">
+            <View style={[styles.cardHeader, { gap: theme.spacing.md }]}>
+              <View style={styles.flexShrink}>
+                <Text style={[theme.typography.titleMd, { color: theme.colors.text }]}>
+                  {test.tank_name || 'Unnamed tank'}
+                </Text>
+                <Text style={[theme.typography.bodySm, { color: theme.colors.textMuted }]}>
+                  {formatDate(test.tested_at)}
+                </Text>
               </View>
-              <StatusBadge status={status} />
+              <StatusPill status={status} />
             </View>
 
             <ReadingValueGrid test={test} ranges={test.tank_id ? rangesByTank[test.tank_id] : []} />
             <StatusInsight test={test} ranges={test.tank_id ? rangesByTank[test.tank_id] : []} />
             <TrendStrip test={test} previousTest={previousTest} />
 
-            {test.notes ? <Text style={styles.notes}>{test.notes}</Text> : null}
+            {test.notes ? (
+              <Text style={[theme.typography.bodyMd, { color: theme.colors.textMuted }]}>
+                {test.notes}
+              </Text>
+            ) : null}
 
-            <View style={styles.cardFooter}>
-              <Text style={styles.waterChange}>
+            <View style={[styles.cardFooter, { gap: theme.spacing.sm }]}>
+              <Text style={[theme.typography.bodySm, styles.flex1, { color: theme.colors.textMuted }]}>
                 Water change: {test.did_water_change ? 'Yes' : 'No'}
               </Text>
-              <Pressable
-                style={styles.editButton}
-                onPress={() => router.push({ pathname: '/edit-test', params: { id: String(test.id) } } as never)}>
-                <Text style={styles.editButtonText}>Edit</Text>
-              </Pressable>
-              <Pressable style={styles.deleteButton} onPress={() => confirmDelete(test)}>
-                <Text style={styles.deleteButtonText}>Delete</Text>
-              </Pressable>
+              <Button
+                label="Edit"
+                size="sm"
+                variant="secondary"
+                leftIcon="pencil"
+                onPress={() =>
+                  router.push({ pathname: '/edit-test', params: { id: String(test.id) } } as never)
+                }
+                accessibilityLabel={`Edit ${test.tank_name || 'this'} test from ${formatDate(test.tested_at)}`}
+              />
+              <Button
+                label="Delete"
+                size="sm"
+                variant="danger"
+                leftIcon="trash.fill"
+                onPress={() => confirmDelete(test)}
+                haptic="warning"
+                accessibilityLabel={`Delete ${test.tank_name || 'this'} test from ${formatDate(test.tested_at)}`}
+              />
             </View>
-          </View>
+          </Card>
         );
       })}
-    </ScrollView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: AquariumTheme.screen,
-    flexGrow: 1,
-    gap: 14,
-    padding: 20,
-    paddingTop: 64,
-  },
-  headerRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 12,
-    justifyContent: 'space-between',
-  },
-  title: {
-    color: AquariumTheme.primaryDark,
-    fontSize: 28,
-    fontWeight: '800',
-  },
-  exportButton: {
-    backgroundColor: AquariumTheme.primary,
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  exportButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  disabledButton: {
-    opacity: 0.5,
-  },
-  emptyPanel: {
-    backgroundColor: AquariumTheme.surfaceWarm,
-    borderColor: '#fed7aa',
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 12,
-    padding: 16,
-  },
-  emptyTitle: {
-    color: AquariumTheme.text,
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  trendsPanel: {
-    backgroundColor: AquariumTheme.surfaceMint,
-    borderColor: AquariumTheme.borderMint,
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 12,
-    padding: 14,
-  },
-  trendsHeader: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  trendsTitle: {
-    color: AquariumTheme.primaryDark,
-    fontSize: 21,
-    fontWeight: '900',
-  },
-  trendsSubtitle: {
-    color: AquariumTheme.muted,
-    fontSize: 14,
-    fontWeight: '700',
-    marginTop: 2,
-  },
-  analyteRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  analyteButton: {
-    backgroundColor: AquariumTheme.surface,
-    borderColor: AquariumTheme.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  selectedAnalyteButton: {
-    backgroundColor: AquariumTheme.primary,
-    borderColor: AquariumTheme.primary,
-  },
-  analyteButtonText: {
-    color: AquariumTheme.primary,
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  selectedAnalyteButtonText: {
-    color: '#ffffff',
-  },
-  chartPrompt: {
-    backgroundColor: AquariumTheme.surface,
-    borderColor: AquariumTheme.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    padding: 14,
-  },
-  card: {
-    backgroundColor: AquariumTheme.surface,
-    borderColor: AquariumTheme.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    elevation: 1,
-    gap: 12,
-    padding: 16,
-    shadowColor: AquariumTheme.shadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
-  },
   cardHeader: {
     alignItems: 'flex-start',
     flexDirection: 'row',
-    gap: 12,
     justifyContent: 'space-between',
   },
-  cardTitleBlock: {
-    flex: 1,
-    gap: 2,
-  },
-  tankName: {
-    color: AquariumTheme.text,
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  notes: {
-    color: AquariumTheme.muted,
-    fontSize: 15,
-    lineHeight: 22,
-  },
+  flexShrink: { flex: 1, gap: 2 },
+  analyteRow: { flexDirection: 'row', flexWrap: 'wrap' },
   cardFooter: {
     alignItems: 'center',
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
-    gap: 12,
   },
-  waterChange: {
-    color: AquariumTheme.muted,
-    flex: 1,
-    fontSize: 14,
-  },
-  deleteButton: {
-    borderColor: '#fecaca',
-    borderRadius: 8,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  editButton: {
-    backgroundColor: AquariumTheme.surfaceBlue,
-    borderColor: AquariumTheme.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  editButtonText: {
-    color: AquariumTheme.primary,
-    fontWeight: '700',
-  },
-  deleteButtonText: {
-    color: '#b42318',
-    fontWeight: '700',
-  },
-  primaryButton: {
-    alignItems: 'center',
-    backgroundColor: AquariumTheme.primary,
-    borderRadius: 8,
-    padding: 14,
-  },
-  primaryButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  mutedText: {
-    color: AquariumTheme.muted,
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  errorText: {
-    color: AquariumTheme.danger,
-    fontSize: 15,
-  },
+  flex1: { flex: 1 },
 });

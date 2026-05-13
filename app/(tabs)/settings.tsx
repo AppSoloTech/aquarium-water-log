@@ -1,10 +1,16 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { TankDropdown } from '@/components/tank-dropdown';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { AquariumTheme } from '@/constants/aquarium-theme';
+import {
+  Button,
+  Card,
+  Screen,
+  Section,
+  TextField,
+  TileButton,
+} from '@/components/ui';
 import {
   DEFAULT_ANALYTE_RANGES,
   deleteWaterTestsForTank,
@@ -33,6 +39,7 @@ import {
   type ReminderSchedule,
 } from '@/lib/reminders';
 import { ANALYTE_LABELS } from '@/lib/water-status';
+import { useTheme } from '@/theme';
 
 type RangeInputState = Record<AnalyteKey, { low: string; high: string }>;
 type SettingsSection =
@@ -53,20 +60,14 @@ function defaultRangeInputs(): RangeInputState {
       low: range.low_value === null ? '' : String(range.low_value),
       high: range.high_value === null ? '' : String(range.high_value),
     };
-
     return result;
   }, {} as RangeInputState);
 }
 
 function parseOptionalNumber(value: string) {
   const trimmed = value.trim();
-
-  if (!trimmed) {
-    return null;
-  }
-
+  if (!trimmed) return null;
   const parsed = Number(trimmed);
-
   return Number.isFinite(parsed) ? parsed : Number.NaN;
 }
 
@@ -79,7 +80,6 @@ function formatReminderInterval(reminder: NotificationReminder) {
       : reminder.interval_value === 1
         ? 'day'
         : 'days';
-
   return `Every ${reminder.interval_value} ${unit}`;
 }
 
@@ -90,7 +90,6 @@ function formatShortDate(value: string) {
 function formatNextReminder(schedule: ReminderSchedule) {
   const hours = schedule.mode === 'hours' ? schedule.interval : schedule.interval * 24;
   const nextReminder = new Date(Date.now() + hours * 60 * 60 * 1000);
-
   return nextReminder.toLocaleString(undefined, {
     weekday: 'short',
     hour: 'numeric',
@@ -98,15 +97,9 @@ function formatNextReminder(schedule: ReminderSchedule) {
   });
 }
 
-function HeaderBack({ title, onBack }: { title: string; onBack: () => void }) {
+function BackButton({ onPress }: { onPress: () => void }) {
   return (
-    <View style={styles.detailHeader}>
-      <Pressable style={styles.backButton} onPress={onBack}>
-        <IconSymbol name="arrow.left" color={AquariumTheme.primary} size={18} />
-        <Text style={styles.backButtonText}>Back</Text>
-      </Pressable>
-      <Text style={styles.title}>{title}</Text>
-    </View>
+    <Button label="Back" variant="ghost" size="sm" leftIcon="arrow.left" onPress={onPress} haptic="none" />
   );
 }
 
@@ -119,9 +112,32 @@ function ModeButton({
   selected: boolean;
   onPress: () => void;
 }) {
+  const theme = useTheme();
   return (
-    <Pressable style={[styles.modeButton, selected ? styles.selectedModeButton : null]} onPress={onPress}>
-      <Text style={[styles.modeButtonText, selected ? styles.selectedModeButtonText : null]}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.modeButton,
+        {
+          backgroundColor: selected
+            ? theme.colors.primary
+            : pressed
+              ? theme.colors.surfaceMuted
+              : theme.colors.surface,
+          borderColor: selected ? theme.colors.primary : theme.colors.border,
+          borderRadius: theme.radius.md,
+          paddingHorizontal: theme.spacing.md,
+          paddingVertical: theme.spacing.md,
+        },
+      ]}>
+      <Text
+        style={[
+          theme.typography.titleSm,
+          { color: selected ? theme.colors.primaryContent : theme.colors.text },
+        ]}>
         {label}
       </Text>
     </Pressable>
@@ -137,17 +153,42 @@ function WheelSelector({
   selectedValue: number;
   onSelect: (value: number) => void;
 }) {
+  const theme = useTheme();
   return (
-    <ScrollView style={styles.wheel} nestedScrollEnabled showsVerticalScrollIndicator={false}>
+    <ScrollView
+      style={[
+        styles.wheel,
+        {
+          backgroundColor: theme.colors.surface,
+          borderColor: theme.colors.border,
+          borderRadius: theme.radius.md,
+        },
+      ]}
+      nestedScrollEnabled
+      showsVerticalScrollIndicator={false}>
       {values.map((value) => {
         const selected = value === selectedValue;
-
         return (
           <Pressable
             key={value}
-            style={[styles.wheelItem, selected ? styles.selectedWheelItem : null]}
+            accessibilityRole="button"
+            accessibilityLabel={`${value}`}
+            accessibilityState={{ selected }}
+            style={[
+              styles.wheelItem,
+              {
+                backgroundColor: selected ? theme.colors.surfaceAccent : 'transparent',
+                borderBottomColor: theme.colors.border,
+              },
+            ]}
             onPress={() => onSelect(value)}>
-            <Text style={[styles.wheelText, selected ? styles.selectedWheelText : null]}>{value}</Text>
+            <Text
+              style={[
+                theme.typography.titleMd,
+                { color: selected ? theme.colors.accent : theme.colors.text, fontVariant: ['tabular-nums'] },
+              ]}>
+              {value}
+            </Text>
           </Pressable>
         );
       })}
@@ -156,6 +197,7 @@ function WheelSelector({
 }
 
 export default function SettingsScreen() {
+  const theme = useTheme();
   const [activeSection, setActiveSection] = useState<SettingsSection>('home');
   const [tanks, setTanks] = useState<Tank[]>([]);
   const [reminders, setReminders] = useState<NotificationReminder[]>([]);
@@ -177,12 +219,12 @@ export default function SettingsScreen() {
     try {
       const [savedTanks, defaultTankId, savedReminderTankId, savedSchedule, savedReminders] =
         await Promise.all([
-        getTanks(),
-        getDefaultTankId(),
-        loadReminderTankId(),
-        loadReminderSchedule(),
-        getNotificationReminders(),
-      ]);
+          getTanks(),
+          getDefaultTankId(),
+          loadReminderTankId(),
+          loadReminderSchedule(),
+          getNotificationReminders(),
+        ]);
       const fallbackTankId = savedReminderTankId ?? defaultTankId ?? savedTanks[0]?.id ?? null;
 
       setTanks(savedTanks);
@@ -213,12 +255,8 @@ export default function SettingsScreen() {
   );
 
   useEffect(() => {
-    if (!toastMessage) {
-      return;
-    }
-
+    if (!toastMessage) return;
     const timeout = setTimeout(() => setToastMessage(''), 2500);
-
     return () => clearTimeout(timeout);
   }, [toastMessage]);
 
@@ -237,7 +275,6 @@ export default function SettingsScreen() {
             low: range.low_value === null ? '' : String(range.low_value),
             high: range.high_value === null ? '' : String(range.high_value),
           };
-
           return result;
         }, {} as RangeInputState),
       );
@@ -252,10 +289,7 @@ export default function SettingsScreen() {
   function updateRange(key: AnalyteKey, side: 'low' | 'high', value: string) {
     setRangeInputs((current) => ({
       ...current,
-      [key]: {
-        ...current[key],
-        [side]: value,
-      },
+      [key]: { ...current[key], [side]: value },
     }));
   }
 
@@ -267,10 +301,7 @@ export default function SettingsScreen() {
   }
 
   function setReminderInterval(interval: number) {
-    setReminderSchedule((current) => ({
-      ...current,
-      interval,
-    }));
+    setReminderSchedule((current) => ({ ...current, interval }));
   }
 
   async function loadReminders() {
@@ -290,10 +321,9 @@ export default function SettingsScreen() {
     try {
       setIsSavingReminder(true);
       const tank = reminderTankId ? await getTank(reminderTankId) : null;
-      const result =
-        tank
-          ? await createReminderNotification(activeSchedule, tank)
-          : { granted: false };
+      const result = tank
+        ? await createReminderNotification(activeSchedule, tank)
+        : { granted: false };
 
       if (!result.granted) {
         Alert.alert(
@@ -472,10 +502,7 @@ export default function SettingsScreen() {
             try {
               setIsImportingBackup(true);
               const result = await pickAndImportWaterTestsCsv();
-
-              if (!result) {
-                return;
-              }
+              if (!result) return;
 
               await loadSettings();
               setToastMessage(
@@ -483,7 +510,10 @@ export default function SettingsScreen() {
               );
             } catch (error) {
               console.error(error);
-              Alert.alert('Import failed', error instanceof Error ? error.message : 'Could not import CSV.');
+              Alert.alert(
+                'Import failed',
+                error instanceof Error ? error.message : 'Could not import CSV.',
+              );
             } finally {
               setIsImportingBackup(false);
             }
@@ -493,53 +523,53 @@ export default function SettingsScreen() {
     );
   }
 
-  function renderSettingsHome() {
+  function renderHome() {
     return (
       <>
-        <Text style={styles.title}>Settings</Text>
-        <View style={styles.tileGrid}>
-          <Pressable style={styles.tile} onPress={() => setActiveSection('manageNotifications')}>
-            <View style={styles.tileIcon}>
-              <IconSymbol name="bell.fill" color={AquariumTheme.primary} size={23} />
-            </View>
-            <Text style={styles.tileTitle}>Manage Notifications</Text>
-            <Text style={styles.tileText}>Review and delete active reminders</Text>
-          </Pressable>
-          <Pressable style={styles.tile} onPress={() => setActiveSection('createNotification')}>
-            <View style={styles.tileIcon}>
-              <IconSymbol name="bell.badge.fill" color={AquariumTheme.primary} size={23} />
-            </View>
-            <Text style={styles.tileTitle}>Create Notification</Text>
-            <Text style={styles.tileText}>Add a tank-specific testing reminder</Text>
-          </Pressable>
-          <Pressable style={styles.tile} onPress={() => setActiveSection('ranges')}>
-            <View style={styles.tileIcon}>
-              <IconSymbol name="target" color={AquariumTheme.primary} size={23} />
-            </View>
-            <Text style={styles.tileTitle}>Target Ranges</Text>
-            <Text style={styles.tileText}>Low and high values by tank</Text>
-          </Pressable>
-          <Pressable style={styles.tile} onPress={() => setActiveSection('dataControls')}>
-            <View style={styles.tileIcon}>
-              <IconSymbol name="externaldrive.fill" color={AquariumTheme.primary} size={23} />
-            </View>
-            <Text style={styles.tileTitle}>Local Data</Text>
-            <Text style={styles.tileText}>Delete tank tests or reset this device</Text>
-          </Pressable>
-          <Pressable style={styles.tile} onPress={() => setActiveSection('backup')}>
-            <View style={styles.tileIcon}>
-              <IconSymbol name="square.and.arrow.down.fill" color={AquariumTheme.primary} size={23} />
-            </View>
-            <Text style={styles.tileTitle}>Backup & Import</Text>
-            <Text style={styles.tileText}>Export or restore CSV water tests</Text>
-          </Pressable>
-          <Pressable style={styles.tile} onPress={() => setActiveSection('about')}>
-            <View style={styles.tileIcon}>
-              <IconSymbol name="info.circle.fill" color={AquariumTheme.primary} size={23} />
-            </View>
-            <Text style={styles.tileTitle}>About & Help</Text>
-            <Text style={styles.tileText}>Privacy, status labels, and target ranges</Text>
-          </Pressable>
+        <Section title="Settings" />
+        <View style={[styles.tileGrid, { gap: theme.spacing.md }]}>
+          <TileButton
+            title="Manage Notifications"
+            description="Review and delete active reminders"
+            icon="bell.fill"
+            onPress={() => setActiveSection('manageNotifications')}
+            style={styles.tileItem}
+          />
+          <TileButton
+            title="Create Notification"
+            description="Add a tank-specific testing reminder"
+            icon="bell.badge.fill"
+            onPress={() => setActiveSection('createNotification')}
+            style={styles.tileItem}
+          />
+          <TileButton
+            title="Target Ranges"
+            description="Low and high values by tank"
+            icon="target"
+            onPress={() => setActiveSection('ranges')}
+            style={styles.tileItem}
+          />
+          <TileButton
+            title="Local Data"
+            description="Delete tank tests or reset this device"
+            icon="externaldrive.fill"
+            onPress={() => setActiveSection('dataControls')}
+            style={styles.tileItem}
+          />
+          <TileButton
+            title="Backup & Import"
+            description="Export or restore CSV water tests"
+            icon="square.and.arrow.down.fill"
+            onPress={() => setActiveSection('backup')}
+            style={styles.tileItem}
+          />
+          <TileButton
+            title="About & Help"
+            description="Privacy, status labels, and target ranges"
+            icon="info.circle.fill"
+            onPress={() => setActiveSection('about')}
+            style={styles.tileItem}
+          />
         </View>
       </>
     );
@@ -551,10 +581,12 @@ export default function SettingsScreen() {
 
     return (
       <>
-        <HeaderBack title="Create Notification" onBack={() => setActiveSection('home')} />
-        <View style={styles.panel}>
-          <Text style={styles.panelTitle}>New Test Reminder</Text>
-          <Text style={styles.helpText}>Choose a tank and set a flexible local reminder interval.</Text>
+        <BackButton onPress={() => setActiveSection('home')} />
+        <Section title="Create Notification" />
+        <Card variant="standard" padding="md" elevation="sm">
+          <Text style={[theme.typography.bodyMd, { color: theme.colors.textMuted }]}>
+            Choose a tank and set a flexible local reminder interval.
+          </Text>
           <TankDropdown
             label="Reminder tank"
             tanks={tanks}
@@ -563,7 +595,7 @@ export default function SettingsScreen() {
             emptyLabel="Select reminder tank"
           />
 
-          <View style={styles.modeRow}>
+          <View style={[styles.modeRow, { gap: theme.spacing.sm }]}>
             <ModeButton
               label="Hourly"
               selected={reminderSchedule.mode === 'hours'}
@@ -576,27 +608,41 @@ export default function SettingsScreen() {
             />
           </View>
 
-          <View style={styles.wheelPanel}>
-            <Text style={styles.rangeLabel}>Repeat every</Text>
-            <View style={styles.wheelRow}>
+          <Card variant="muted" padding="md" elevation="none">
+            <Text style={[theme.typography.label, { color: theme.colors.text }]}>Repeat every</Text>
+            <View style={[styles.wheelRow, { gap: theme.spacing.sm }]}>
               <WheelSelector
                 values={values}
                 selectedValue={reminderSchedule.interval}
                 onSelect={setReminderInterval}
               />
-              <View style={styles.unitWheel}>
-                <Text style={styles.unitWheelText}>{unitLabel}</Text>
+              <View
+                style={[
+                  styles.unitWheel,
+                  {
+                    backgroundColor: theme.colors.surface,
+                    borderColor: theme.colors.border,
+                    borderRadius: theme.radius.md,
+                  },
+                ]}>
+                <Text style={[theme.typography.titleMd, { color: theme.colors.primary }]}>
+                  {unitLabel}
+                </Text>
               </View>
             </View>
-            <Text style={styles.previewText}>Next reminder: {formatNextReminder(reminderSchedule)}</Text>
-          </View>
-
-          <Pressable style={styles.primaryButton} onPress={saveReminder} disabled={isSavingReminder}>
-            <Text style={styles.primaryButtonText}>
-              {isSavingReminder ? 'Saving...' : 'Create Notification'}
+            <Text style={[theme.typography.caption, { color: theme.colors.textMuted }]}>
+              Next reminder: {formatNextReminder(reminderSchedule)}
             </Text>
-          </Pressable>
-        </View>
+          </Card>
+
+          <Button
+            label={isSavingReminder ? 'Saving...' : 'Create Notification'}
+            onPress={saveReminder}
+            loading={isSavingReminder}
+            leftIcon="bell.badge.fill"
+            fullWidth
+          />
+        </Card>
       </>
     );
   }
@@ -604,48 +650,66 @@ export default function SettingsScreen() {
   function renderManageNotifications() {
     return (
       <>
-        <HeaderBack title="Manage Notifications" onBack={() => setActiveSection('home')} />
-        <View style={styles.panel}>
-          <Text style={styles.panelTitle}>Active Notifications</Text>
-          <Text style={styles.helpText}>
+        <BackButton onPress={() => setActiveSection('home')} />
+        <Section title="Manage Notifications" />
+        <Card variant="standard" padding="md" elevation="sm">
+          <Text style={[theme.typography.bodyMd, { color: theme.colors.textMuted }]}>
             One active notification is kept per tank. Creating a new one for the same tank replaces
             the previous schedule.
           </Text>
 
           {reminders.length === 0 ? (
-            <Text style={styles.emptyText}>No notifications have been created yet.</Text>
+            <Text style={[theme.typography.bodyMd, { color: theme.colors.textMuted }]}>
+              No notifications have been created yet.
+            </Text>
           ) : null}
 
           {reminders.map((reminder) => (
-            <View key={reminder.id} style={styles.notificationRow}>
-              <View style={styles.notificationTextBlock}>
-                <Text style={styles.notificationTitle}>{reminder.tank_name}</Text>
-                <Text style={styles.notificationInterval}>{formatReminderInterval(reminder)}</Text>
-                <Text style={styles.helpText}>Created {formatShortDate(reminder.created_at)}</Text>
+            <Card key={reminder.id} variant="muted" padding="md" elevation="none">
+              <View style={[styles.notificationRow, { gap: theme.spacing.md }]}>
+                <View style={styles.notificationTextBlock}>
+                  <Text style={[theme.typography.titleSm, { color: theme.colors.text }]}>
+                    {reminder.tank_name}
+                  </Text>
+                  <Text style={[theme.typography.bodyMd, { color: theme.colors.primary }]}>
+                    {formatReminderInterval(reminder)}
+                  </Text>
+                  <Text style={[theme.typography.caption, { color: theme.colors.textMuted }]}>
+                    Created {formatShortDate(reminder.created_at)}
+                  </Text>
+                </View>
+                <Button
+                  label="Delete"
+                  size="sm"
+                  variant="danger"
+                  leftIcon="trash.fill"
+                  onPress={() => deleteReminder(reminder)}
+                  haptic="warning"
+                  accessibilityLabel={`Delete reminder for ${reminder.tank_name}`}
+                />
               </View>
-              <Pressable style={styles.deleteButton} onPress={() => deleteReminder(reminder)}>
-                <Text style={styles.deleteButtonText}>Delete</Text>
-              </Pressable>
-            </View>
+            </Card>
           ))}
 
-          <Pressable
-            style={styles.primaryButton}
-            onPress={() => setActiveSection('createNotification')}>
-            <Text style={styles.primaryButtonText}>Create Notification</Text>
-          </Pressable>
-        </View>
+          <Button
+            label="Create Notification"
+            leftIcon="plus"
+            variant="secondary"
+            onPress={() => setActiveSection('createNotification')}
+            fullWidth
+          />
+        </Card>
       </>
     );
   }
 
-  function renderRangeSettings() {
+  function renderRanges() {
     return (
       <>
-        <HeaderBack title="Target Ranges" onBack={() => setActiveSection('home')} />
-        <View style={styles.panel}>
-          <Text style={styles.panelTitle}>Target Ranges</Text>
-          <Text style={styles.helpText}>
+        <BackButton onPress={() => setActiveSection('home')} />
+        <Section title="Target Ranges" />
+        <Card variant="standard" padding="md" elevation="sm">
+          <Text style={[theme.typography.bodyMd, { color: theme.colors.textMuted }]}>
             Set low and high target values per tank. Empty values mean no target is set yet.
           </Text>
           <TankDropdown
@@ -658,38 +722,47 @@ export default function SettingsScreen() {
 
           {Object.entries(rangeInputs).map(([key, value]) => {
             const analyteKey = key as AnalyteKey;
-
             return (
-              <View key={key} style={styles.rangeRow}>
-                <Text style={styles.rangeLabel}>{ANALYTE_LABELS[analyteKey]}</Text>
-                <View style={styles.rangeInputs}>
-                  <TextInput
-                    inputMode="decimal"
-                    keyboardType="decimal-pad"
-                    style={styles.rangeInput}
+              <View key={key} style={[styles.rangeRow, { gap: theme.spacing.sm }]}>
+                <Text style={[theme.typography.label, { color: theme.colors.text }]}>
+                  {ANALYTE_LABELS[analyteKey]}
+                </Text>
+                <View style={[styles.rangeInputs, { gap: theme.spacing.sm }]}>
+                  <TextField
                     value={value.low}
                     onChangeText={(text) => updateRange(analyteKey, 'low', text)}
                     placeholder="Low"
-                  />
-                  <TextInput
                     inputMode="decimal"
                     keyboardType="decimal-pad"
-                    style={styles.rangeInput}
+                    size="sm"
+                    accessibilityLabel={`${ANALYTE_LABELS[analyteKey]} low target`}
+                    containerStyle={styles.flex1}
+                    inputStyle={{ fontVariant: ['tabular-nums'] }}
+                  />
+                  <TextField
                     value={value.high}
                     onChangeText={(text) => updateRange(analyteKey, 'high', text)}
                     placeholder="High"
+                    inputMode="decimal"
+                    keyboardType="decimal-pad"
+                    size="sm"
+                    accessibilityLabel={`${ANALYTE_LABELS[analyteKey]} high target`}
+                    containerStyle={styles.flex1}
+                    inputStyle={{ fontVariant: ['tabular-nums'] }}
                   />
                 </View>
               </View>
             );
           })}
 
-          <Pressable style={styles.primaryButton} onPress={saveRanges} disabled={isSavingRanges}>
-            <Text style={styles.primaryButtonText}>
-              {isSavingRanges ? 'Saving...' : 'Save Target Ranges'}
-            </Text>
-          </Pressable>
-        </View>
+          <Button
+            label={isSavingRanges ? 'Saving...' : 'Save Target Ranges'}
+            onPress={saveRanges}
+            loading={isSavingRanges}
+            leftIcon="checkmark.circle.fill"
+            fullWidth
+          />
+        </Card>
       </>
     );
   }
@@ -697,53 +770,55 @@ export default function SettingsScreen() {
   function renderDataControls() {
     return (
       <>
-        <HeaderBack title="Local Data" onBack={() => setActiveSection('home')} />
-        <View style={styles.panel}>
-          <Text style={styles.panelTitle}>Data Controls</Text>
-          <Text style={styles.helpText}>
-            Manage records stored only on this device. These actions do not affect any external
-            account because the app does not sync data to a server.
+        <BackButton onPress={() => setActiveSection('home')} />
+        <Section title="Local Data" />
+        <Text style={[theme.typography.bodyMd, { color: theme.colors.textMuted }]}>
+          Manage records stored only on this device. These actions do not affect any external
+          account because the app does not sync data to a server.
+        </Text>
+
+        <Card variant="warning" padding="md" elevation="sm">
+          <Text style={[theme.typography.titleMd, { color: theme.colors.text }]}>
+            Delete tests for one tank
           </Text>
+          <Text style={[theme.typography.bodyMd, { color: theme.colors.textMuted }]}>
+            Removes saved test history for the selected tank while keeping the tank profile, target
+            ranges, and notifications.
+          </Text>
+          <TankDropdown
+            label="Cleanup tank"
+            tanks={tanks}
+            selectedTankId={dataTankId}
+            onSelect={setDataTankId}
+            emptyLabel="Select cleanup tank"
+          />
+          <Button
+            label={isDeletingTankTests ? 'Deleting...' : 'Delete Tests For Tank'}
+            variant="danger"
+            leftIcon="trash.fill"
+            onPress={confirmDeleteTankTests}
+            loading={isDeletingTankTests}
+            haptic="warning"
+            fullWidth
+          />
+        </Card>
 
-          <View style={styles.warningPanel}>
-            <Text style={styles.warningTitle}>Delete tests for one tank</Text>
-            <Text style={styles.helpText}>
-              Removes saved test history for the selected tank while keeping the tank profile,
-              target ranges, and notifications.
-            </Text>
-            <TankDropdown
-              label="Cleanup tank"
-              tanks={tanks}
-              selectedTankId={dataTankId}
-              onSelect={setDataTankId}
-              emptyLabel="Select cleanup tank"
-            />
-            <Pressable
-              style={[styles.dangerButton, isDeletingTankTests ? styles.disabledButton : null]}
-              onPress={confirmDeleteTankTests}
-              disabled={isDeletingTankTests}>
-              <Text style={styles.dangerButtonText}>
-                {isDeletingTankTests ? 'Deleting...' : 'Delete Tests For Tank'}
-              </Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.warningPanel}>
-            <Text style={styles.warningTitle}>Reset app data</Text>
-            <Text style={styles.helpText}>
-              Deletes all tanks, tests, target ranges, local notification records, and app
-              settings. Scheduled reminders are canceled.
-            </Text>
-            <Pressable
-              style={[styles.dangerButton, isResettingData ? styles.disabledButton : null]}
-              onPress={confirmResetLocalData}
-              disabled={isResettingData}>
-              <Text style={styles.dangerButtonText}>
-                {isResettingData ? 'Resetting...' : 'Reset All Local Data'}
-              </Text>
-            </Pressable>
-          </View>
-        </View>
+        <Card variant="warning" padding="md" elevation="sm">
+          <Text style={[theme.typography.titleMd, { color: theme.colors.text }]}>Reset app data</Text>
+          <Text style={[theme.typography.bodyMd, { color: theme.colors.textMuted }]}>
+            Deletes all tanks, tests, target ranges, local notification records, and app settings.
+            Scheduled reminders are canceled.
+          </Text>
+          <Button
+            label={isResettingData ? 'Resetting...' : 'Reset All Local Data'}
+            variant="danger"
+            leftIcon="arrow.clockwise"
+            onPress={confirmResetLocalData}
+            loading={isResettingData}
+            haptic="warning"
+            fullWidth
+          />
+        </Card>
       </>
     );
   }
@@ -751,38 +826,45 @@ export default function SettingsScreen() {
   function renderBackup() {
     return (
       <>
-        <HeaderBack title="Backup & Import" onBack={() => setActiveSection('home')} />
-        <View style={styles.panel}>
-          <Text style={styles.panelTitle}>CSV Backup</Text>
-          <Text style={styles.helpText}>
+        <BackButton onPress={() => setActiveSection('home')} />
+        <Section title="Backup & Import" />
+        <Card variant="standard" padding="md" elevation="sm">
+          <Text style={[theme.typography.bodyMd, { color: theme.colors.textMuted }]}>
             Export creates a CSV you can save to cloud storage, email to yourself, or move to
             another device. Import merges rows from an Aquarium Water Log CSV.
           </Text>
 
-          <View style={styles.infoPanel}>
-            <Text style={styles.infoTitle}>What import does</Text>
-            <Text style={styles.helpText}>Creates missing tanks by name.</Text>
-            <Text style={styles.helpText}>Adds new water tests.</Text>
-            <Text style={styles.helpText}>Skips rows that already match existing readings.</Text>
-          </View>
+          <Card variant="muted" padding="md" elevation="none">
+            <Text style={[theme.typography.titleSm, { color: theme.colors.text }]}>
+              What import does
+            </Text>
+            <Text style={[theme.typography.bodySm, { color: theme.colors.textMuted }]}>
+              Creates missing tanks by name.
+            </Text>
+            <Text style={[theme.typography.bodySm, { color: theme.colors.textMuted }]}>
+              Adds new water tests.
+            </Text>
+            <Text style={[theme.typography.bodySm, { color: theme.colors.textMuted }]}>
+              Skips rows that already match existing readings.
+            </Text>
+          </Card>
 
-          <Pressable
-            style={[styles.primaryButton, isExportingBackup ? styles.disabledButton : null]}
+          <Button
+            label={isExportingBackup ? 'Exporting...' : 'Export All Tests CSV'}
+            leftIcon="square.and.arrow.up.fill"
             onPress={exportAllTests}
-            disabled={isExportingBackup}>
-            <Text style={styles.primaryButtonText}>
-              {isExportingBackup ? 'Exporting...' : 'Export All Tests CSV'}
-            </Text>
-          </Pressable>
-          <Pressable
-            style={[styles.secondaryWideButton, isImportingBackup ? styles.disabledButton : null]}
+            loading={isExportingBackup}
+            fullWidth
+          />
+          <Button
+            label={isImportingBackup ? 'Importing...' : 'Import Tests From CSV'}
+            variant="secondary"
+            leftIcon="square.and.arrow.down.fill"
             onPress={confirmImportCsv}
-            disabled={isImportingBackup}>
-            <Text style={styles.secondaryWideButtonText}>
-              {isImportingBackup ? 'Importing...' : 'Import Tests From CSV'}
-            </Text>
-          </Pressable>
-        </View>
+            loading={isImportingBackup}
+            fullWidth
+          />
+        </Card>
       </>
     );
   }
@@ -790,394 +872,126 @@ export default function SettingsScreen() {
   function renderAbout() {
     return (
       <>
-        <HeaderBack title="About & Help" onBack={() => setActiveSection('home')} />
-        <View style={styles.panel}>
-          <Text style={styles.panelTitle}>Aquarium Water Log</Text>
-          <Text style={styles.helpText}>
+        <BackButton onPress={() => setActiveSection('home')} />
+        <Section title="About & Help" />
+        <Card variant="standard" padding="md" elevation="sm">
+          <Text style={[theme.typography.titleMd, { color: theme.colors.text }]}>
+            Aquarium Water Log
+          </Text>
+          <Text style={[theme.typography.bodyMd, { color: theme.colors.textMuted }]}>
             This app is local-first. Tanks, readings, target ranges, reminders, and settings are
             stored on this device. There is no account, backend, cloud sync, ads, or subscription.
           </Text>
 
-          <View style={styles.infoPanel}>
-            <Text style={styles.infoTitle}>Status Labels</Text>
-            <Text style={styles.helpText}>Good: measured values are within target.</Text>
-            <Text style={styles.helpText}>Caution: one or more values are outside target.</Text>
-            <Text style={styles.helpText}>Danger: a value needs immediate attention, such as NO2 above zero.</Text>
-          </View>
-
-          <View style={styles.infoPanel}>
-            <Text style={styles.infoTitle}>Target Ranges</Text>
-            <Text style={styles.helpText}>
-              Target ranges let each tank have its own low and high values for NO3, NO2, pH, KH,
-              and GH. Empty low or high values mean that side of the target is not checked.
+          <Card variant="muted" padding="md" elevation="none">
+            <Text style={[theme.typography.titleSm, { color: theme.colors.text }]}>Status Labels</Text>
+            <Text style={[theme.typography.bodySm, { color: theme.colors.textMuted }]}>
+              Good: measured values are within target.
             </Text>
-          </View>
+            <Text style={[theme.typography.bodySm, { color: theme.colors.textMuted }]}>
+              Caution: one or more values are outside target.
+            </Text>
+            <Text style={[theme.typography.bodySm, { color: theme.colors.textMuted }]}>
+              Danger: a value needs immediate attention, such as NO2 above zero.
+            </Text>
+          </Card>
 
-          <View style={styles.infoPanel}>
-            <Text style={styles.infoTitle}>Backups</Text>
-            <Text style={styles.helpText}>
+          <Card variant="muted" padding="md" elevation="none">
+            <Text style={[theme.typography.titleSm, { color: theme.colors.text }]}>Target Ranges</Text>
+            <Text style={[theme.typography.bodySm, { color: theme.colors.textMuted }]}>
+              Target ranges let each tank have its own low and high values for NO3, NO2, pH, KH, and
+              GH. Empty low or high values mean that side of the target is not checked.
+            </Text>
+          </Card>
+
+          <Card variant="muted" padding="md" elevation="none">
+            <Text style={[theme.typography.titleSm, { color: theme.colors.text }]}>Backups</Text>
+            <Text style={[theme.typography.bodySm, { color: theme.colors.textMuted }]}>
               CSV export is the portable backup format. Keep a copy outside the app before
               uninstalling, changing phones, or resetting local data.
             </Text>
-          </View>
-        </View>
+          </Card>
+        </Card>
       </>
     );
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-      {activeSection === 'home' ? renderSettingsHome() : null}
+    <Screen>
+      {activeSection === 'home' ? renderHome() : null}
       {activeSection === 'manageNotifications' ? renderManageNotifications() : null}
       {activeSection === 'createNotification' ? renderCreateNotification() : null}
-      {activeSection === 'ranges' ? renderRangeSettings() : null}
+      {activeSection === 'ranges' ? renderRanges() : null}
       {activeSection === 'backup' ? renderBackup() : null}
       {activeSection === 'about' ? renderAbout() : null}
       {activeSection === 'dataControls' ? renderDataControls() : null}
 
-      {toastMessage ? <Text style={styles.toast}>{toastMessage}</Text> : null}
-    </ScrollView>
+      {toastMessage ? (
+        <View
+          style={[
+            styles.toast,
+            {
+              backgroundColor: theme.colors.primary,
+              borderRadius: theme.radius.pill,
+              paddingHorizontal: theme.spacing.lg,
+              paddingVertical: theme.spacing.sm,
+            },
+          ]}
+          accessibilityLiveRegion="polite">
+          <Text style={[theme.typography.titleSm, { color: theme.colors.primaryContent }]}>
+            {toastMessage}
+          </Text>
+        </View>
+      ) : null}
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: AquariumTheme.screen,
-    flexGrow: 1,
-    gap: 16,
-    padding: 20,
-    paddingTop: 64,
-  },
-  title: {
-    color: AquariumTheme.primaryDark,
-    fontSize: 28,
-    fontWeight: '800',
-  },
-  detailHeader: {
-    gap: 10,
-  },
-  backButton: {
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: AquariumTheme.surface,
-    borderColor: AquariumTheme.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  backButtonText: {
-    color: AquariumTheme.primary,
-    fontWeight: '800',
-  },
   tileGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
   },
-  tile: {
-    backgroundColor: AquariumTheme.surface,
-    borderColor: AquariumTheme.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    flexBasis: '47%',
-    gap: 8,
-    elevation: 2,
-    minHeight: 142,
-    padding: 16,
-    shadowColor: AquariumTheme.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
+  tileItem: {
+    // Two-column grid; `gap` on the parent handles the inter-tile spacing.
+    flex: 0,
+    flexBasis: '48%',
   },
-  tileIcon: {
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: AquariumTheme.surfaceMint,
-    borderRadius: 8,
-    height: 40,
-    justifyContent: 'center',
-    minWidth: 38,
-    paddingHorizontal: 8,
-  },
-  tileTitle: {
-    color: AquariumTheme.text,
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  tileText: {
-    color: AquariumTheme.muted,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  panel: {
-    backgroundColor: AquariumTheme.surface,
-    borderColor: AquariumTheme.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    elevation: 2,
-    gap: 12,
-    padding: 16,
-    shadowColor: AquariumTheme.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-  },
-  panelTitle: {
-    color: AquariumTheme.primaryDark,
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  helpText: {
-    color: AquariumTheme.muted,
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  primaryButton: {
-    alignItems: 'center',
-    backgroundColor: AquariumTheme.primary,
-    borderRadius: 8,
-    padding: 14,
-  },
-  primaryButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  modeRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
+  modeRow: { flexDirection: 'row' },
   modeButton: {
     alignItems: 'center',
-    backgroundColor: AquariumTheme.surfaceBlue,
-    borderColor: AquariumTheme.border,
-    borderRadius: 8,
     borderWidth: 1,
     flex: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 12,
   },
-  selectedModeButton: {
-    backgroundColor: AquariumTheme.surfaceMint,
-    borderColor: AquariumTheme.teal,
-  },
-  modeButtonText: {
-    color: AquariumTheme.text,
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  selectedModeButtonText: {
-    color: AquariumTheme.teal,
-  },
-  wheelPanel: {
-    backgroundColor: AquariumTheme.surfaceBlue,
-    borderColor: AquariumTheme.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 10,
-    padding: 14,
-  },
-  wheelRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
+  wheelRow: { flexDirection: 'row' },
   wheel: {
-    backgroundColor: AquariumTheme.surface,
-    borderColor: AquariumTheme.border,
-    borderRadius: 8,
     borderWidth: 1,
     flex: 1,
     height: 150,
   },
   wheelItem: {
     alignItems: 'center',
-    borderBottomColor: AquariumTheme.borderSoft,
-    borderBottomWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     paddingVertical: 12,
-  },
-  selectedWheelItem: {
-    backgroundColor: AquariumTheme.surfaceMint,
-  },
-  wheelText: {
-    color: AquariumTheme.text,
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  selectedWheelText: {
-    color: AquariumTheme.teal,
   },
   unitWheel: {
     alignItems: 'center',
-    backgroundColor: AquariumTheme.surface,
-    borderColor: AquariumTheme.border,
-    borderRadius: 8,
     borderWidth: 1,
     height: 150,
     justifyContent: 'center',
     width: 110,
   },
-  unitWheelText: {
-    color: AquariumTheme.primary,
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  previewText: {
-    color: AquariumTheme.primaryDark,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  optionGroup: {
-    gap: 10,
-  },
-  optionButton: {
-    backgroundColor: AquariumTheme.surfaceBlue,
-    borderColor: AquariumTheme.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    padding: 14,
-  },
-  selectedOption: {
-    backgroundColor: AquariumTheme.surfaceMint,
-    borderColor: AquariumTheme.teal,
-  },
-  optionText: {
-    color: AquariumTheme.text,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  selectedOptionText: {
-    color: AquariumTheme.teal,
-  },
-  rangeRow: {
-    gap: 8,
-  },
-  rangeLabel: {
-    color: AquariumTheme.text,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  rangeInputs: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  rangeInput: {
-    backgroundColor: AquariumTheme.surfaceBlue,
-    borderColor: AquariumTheme.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    color: AquariumTheme.text,
-    flex: 1,
-    fontSize: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-  },
-  emptyText: {
-    color: AquariumTheme.muted,
-    fontSize: 15,
-    lineHeight: 22,
-  },
+  rangeRow: {},
+  rangeInputs: { flexDirection: 'row' },
+  flex1: { flex: 1 },
   notificationRow: {
     alignItems: 'center',
-    backgroundColor: AquariumTheme.surfaceBlue,
-    borderColor: AquariumTheme.border,
-    borderRadius: 8,
-    borderWidth: 1,
     flexDirection: 'row',
-    gap: 12,
     justifyContent: 'space-between',
-    padding: 12,
   },
-  notificationTextBlock: {
-    flex: 1,
-    gap: 2,
-  },
-  notificationTitle: {
-    color: AquariumTheme.text,
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  notificationInterval: {
-    color: AquariumTheme.primary,
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  deleteButton: {
-    borderColor: '#fecaca',
-    borderRadius: 8,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  deleteButtonText: {
-    color: '#b42318',
-    fontWeight: '800',
-  },
-  warningPanel: {
-    backgroundColor: '#fff7ed',
-    borderColor: '#fed7aa',
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 10,
-    padding: 14,
-  },
-  infoPanel: {
-    backgroundColor: AquariumTheme.surfaceBlue,
-    borderColor: AquariumTheme.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    gap: 8,
-    padding: 14,
-  },
-  infoTitle: {
-    color: AquariumTheme.primaryDark,
-    fontSize: 17,
-    fontWeight: '900',
-  },
-  secondaryWideButton: {
-    alignItems: 'center',
-    backgroundColor: AquariumTheme.surfaceBlue,
-    borderColor: AquariumTheme.border,
-    borderRadius: 8,
-    borderWidth: 1,
-    padding: 14,
-  },
-  secondaryWideButtonText: {
-    color: AquariumTheme.primary,
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  warningTitle: {
-    color: '#9a3412',
-    fontSize: 17,
-    fontWeight: '800',
-  },
-  dangerButton: {
-    alignItems: 'center',
-    backgroundColor: '#b42318',
-    borderRadius: 8,
-    padding: 14,
-  },
-  dangerButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  disabledButton: {
-    opacity: 0.65,
-  },
+  notificationTextBlock: { flex: 1, gap: 2 },
   toast: {
     alignSelf: 'center',
-    backgroundColor: AquariumTheme.primary,
-    borderRadius: 8,
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '800',
     marginTop: 4,
-    overflow: 'hidden',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
   },
 });
