@@ -6,7 +6,7 @@ import { ComponentProps } from 'react';
 import { OpaqueColorValue, type StyleProp, type TextStyle } from 'react-native';
 
 type IconMapping = Record<SymbolViewProps['name'], ComponentProps<typeof MaterialIcons>['name']>;
-type IconSymbolName = keyof typeof MAPPING;
+export type IconSymbolName = keyof typeof MAPPING;
 
 /**
  * Add your SF Symbols to Material Icons mappings here.
@@ -16,20 +16,38 @@ type IconSymbolName = keyof typeof MAPPING;
 const MAPPING = {
   'house.fill': 'home',
   'plus.circle.fill': 'add-circle',
+  'plus': 'add',
   'drop.fill': 'water-drop',
   'list.bullet': 'list',
   'gearshape.fill': 'settings',
   'paperplane.fill': 'send',
   'chevron.left.forwardslash.chevron.right': 'code',
   'chevron.right': 'chevron-right',
+  'chevron.down': 'expand-more',
   'bell.fill': 'notifications',
   'bell.badge.fill': 'add-alert',
   'target': 'track-changes',
   'externaldrive.fill': 'storage',
   'arrow.left': 'arrow-back',
+  'arrow.clockwise': 'refresh',
   'info.circle.fill': 'info',
   'square.and.arrow.down.fill': 'file-download',
   'square.and.arrow.up.fill': 'file-upload',
+  'trash.fill': 'delete',
+  'pencil': 'edit',
+  'checkmark': 'check',
+  'checkmark.circle.fill': 'check-circle',
+  'xmark': 'close',
+  'xmark.circle.fill': 'cancel',
+  'star.fill': 'star',
+  'star': 'star-outline',
+  'flask.fill': 'science',
+  'calendar': 'event',
+  'clock': 'access-time',
+  'chart.bar.fill': 'bar-chart',
+  'exclamationmark.triangle.fill': 'warning',
+  'exclamationmark.circle.fill': 'error',
+  'square.grid.2x2.fill': 'grid-view',
 } as IconMapping;
 
 /**
